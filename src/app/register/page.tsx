@@ -27,47 +27,47 @@ export default function RegisterPage() {
   }, [password]);
 
   async function handleRegister(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
+  e.preventDefault();
+  setError("");
 
-    if (!username || !email || !password || !confirmPassword) {
-      setError("All fields are required.");
-      return;
-    }
-
-    if (!isStrongPassword) {
-      setError(passwordRuleText);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data?.error || "Registration failed.");
-        setLoading(false);
-        return;
-      }
-
-      router.push(`/register/success?username=${encodeURIComponent(username)}`);
-    } catch {
-      setError("Something went wrong.");
-    } finally {
-      setLoading(false);
-    }
+  if (!username || !email || !password || !confirmPassword) {
+    setError("All fields are required.");
+    return;
   }
+
+  if (!isStrongPassword) {
+    setError(passwordRuleText);
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, email, password }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data?.error || "Registration failed.");
+      return;
+    }
+
+    router.push(`/register/success?username=${encodeURIComponent(username)}`);
+  } catch {
+    setError("Something went wrong.");
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   return (
     <main className="min-h-screen bg-neutral-50">

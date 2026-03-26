@@ -10,16 +10,46 @@ function id() {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+
     const username = (searchParams.get("username") || "").trim();
 
+    const pageParam = parseInt(searchParams.get("page") || "1", 10);
+    const limitParam = parseInt(searchParams.get("limit") || "10", 10);
+
+    const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+    const limit =
+      Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 100
+        ? limitParam
+        : 10;
+
     const posts = await readPosts();
+
     const filtered = username
-      ? posts.filter((p) => p.author.toLowerCase() === username.toLowerCase())
+      ? posts.filter(
+          (p) => p.author.toLowerCase() === username.toLowerCase()
+        )
       : posts;
 
-    return NextResponse.json({ ok: true, posts: filtered }, { status: 200 });
+    const total = filtered.length;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+
+    const paginated = filtered.slice(start, end);
+    const hasMore = end < total;
+
+    return NextResponse.json(
+      { ok: true, posts: paginated, page, limit, total, hasMore },
+      { status: 200 ,
+        headers:{
+            "Cache-Control": "private, max-age=10",
+        },
+      }
+    );
   } catch {
-    return NextResponse.json({ ok: false, error: "Failed to load posts" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "Failed to load posts" },
+      { status: 500 }
+    );
   }
 }
 

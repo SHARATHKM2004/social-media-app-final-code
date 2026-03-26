@@ -1,5 +1,5 @@
 "use client";
-
+import { Post } from "@/types/post";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -8,7 +8,8 @@ export default function PublicProfilePage() {
   const params = useParams<{ username: string }>();
   const usernameParam = decodeURIComponent(params.username || "");
   
-
+const [userPosts, setUserPosts] = useState<Post[]>([]);
+const [postsCount, setPostsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<{
     username: string;
@@ -38,6 +39,12 @@ export default function PublicProfilePage() {
         }
 const postsRes = await fetch(`/api/posts?username=${encodeURIComponent(usernameParam)}`);
 const postsData = await postsRes.json();
+
+if (postsRes.ok) {
+  setUserPosts(postsData.posts || []);
+  setPostsCount((postsData.posts || []).length);
+}
+
       } 
       finally {
         setLoading(false);
@@ -104,7 +111,39 @@ const postsData = await postsRes.json();
                   <span className="font-semibold">Bio:</span>{" "}
                   {profile.bio || <span className="text-gray-400">empty</span>}
                 </p>
+
+                
               </div>
+
+              <p className="mt-3 text-sm text-gray-700">
+  <span className="font-semibold">{postsCount}</span> posts
+</p>
+
+<div className="mt-5">
+  <h3 className="text-sm font-semibold text-gray-900">Posts</h3>
+
+  {userPosts.length === 0 ? (
+    <p className="mt-2 text-sm text-gray-600">No posts yet.</p>
+  ) : (
+    <div className="mt-3 grid grid-cols-3 gap-2">
+      {userPosts.map((p: Post) => (
+        <div
+          key={p.id}
+          className="aspect-square overflow-hidden rounded-xl border border-gray-200 bg-neutral-100"
+        >
+          {p.mediaType === "image" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.mediaDataUrl} alt="post" className="h-full w-full object-cover" />
+          ) : (
+            <video className="h-full w-full object-cover">
+              <source src={p.mediaDataUrl} />
+            </video>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
             </>
           )}
         </div>

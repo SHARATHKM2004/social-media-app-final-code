@@ -1,0 +1,79 @@
+[
+  {
+    "id": "1773741327523-4366906d223fe8",
+    "from": "kmsit",
+    "to": "kmsit",
+    "text": "hii",
+    "createdAt": "2026-03-17T09:55:27.523Z"
+  },
+  {
+    "id": "1773741330098-5727d14dc85c98",
+    "from": "kmsit",
+    "to": "kmsit",
+    "text": "hi",
+    "createdAt": "2026-03-17T09:55:30.098Z"
+  },
+  {
+    "id": "1773741331509-e6b845e5f21de",
+    "from": "kmsit",
+    "to": "kmsit",
+    "text": "hlo",
+    "createdAt": "2026-03-17T09:55:31.509Z"
+  },
+  {
+    "id": "1773741401071-80d6ff55c9e7e8",
+    "from": "kmsit",
+    "to": "vinaysai",
+    "text": "hi",
+    "createdAt": "2026-03-17T09:56:41.071Z"
+  },
+  {
+    "id": "1773741421824-dfd3dbfe93f808",
+    "from": "vinaysai",
+    "to": "kmsit",
+    "text": "hlo",
+    "createdAt": "2026-03-17T09:57:01.824Z"
+  },
+  {
+    "id": "1773743226780-c64353e42bbf98",
+    "from": "vinaysai",
+    "to": "kmsit",
+    "text": "heyy",
+    "createdAt": "2026-03-17T10:27:06.780Z"
+  },
+  {
+    "id": "1773745453657-a7a9244ca71918",
+    "from": "paratham",
+    "to": "vinaysai",
+    "text": "hii",
+    "createdAt": "2026-03-17T11:04:13.657Z"
+  },
+  {
+    "id": "1773745519633-3de72739e3a4b8",
+    "from": "vinaysai",
+    "to": "paratham",
+    "text": "hello",
+    "createdAt": "2026-03-17T11:05:19.633Z"
+  },
+  {
+    "id": "1773815577719-7d03ff25aec1d8",
+    "from": "vinaysai",
+    "to": "kmsit",
+    "text": "hello",
+    "createdAt": "2026-03-18T06:32:57.719Z"
+  },
+  {
+    "id": "1774402388663-5fbcc7acfa6788",
+    "from": "kir",
+    "to": "koris",
+    "text": "heyy",
+    "createdAt": "2026-03-25T01:33:08.663Z"
+  },
+  {
+    "id": "1774402433688-6225ec6ac0313",
+    "from": "koris",
+    "to": "kir",
+    "text": "hllo",
+    "createdAt": "2026-03-25T01:33:53.689Z"
+  }
+]

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findUserByUsername } from "@/lib/userStore";
-
+import { verifyPassword } from "@/lib/password";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -15,9 +15,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
     }
 
-    if (user.password !== password) {
-      return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
-    }
+   const ok = await verifyPassword(password, user.password);
+if (!ok) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
 
     return NextResponse.json({ ok: true, username }, { status: 200 });
   } catch {

@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { findUserByUsername, updateUser } from "@/lib/userStore";
+import bcrypt from "bcryptjs";
 
 function isStrongPassword(password: string) {
   const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -29,11 +30,20 @@ export async function POST(req: Request) {
     }
 
     const user = await findUserByUsername(username);
-    if (!user || user.password !== currentPassword) {
+    if (!user) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
+    // ✅ Compare current password with stored hash
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) {
       return NextResponse.json({ error: "Current password is incorrect." }, { status: 401 });
     }
 
-    await updateUser(username, { password: newPassword });
+    // ✅ Hash new password before saving
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    await updateUser(username, { password: hashed });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Something went wrong." }, { status: 500 });

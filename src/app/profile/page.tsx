@@ -1,157 +1,120 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState,lazy, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import useBackToLanding from "@/components/useBackToLanding";
 import BottomNav from "@/components/BottomNav";
+import UserPostsGrid from "@/components/profile/UserPostsGrid";
 
-import { useRouter } from "next/navigation";
+import { useProfileData } from "@/hooks/useProfile";
+const AccountActionsModal=lazy(() =>import("@/components/profile/AccountActionsModal"));
+const PrivacyPolicyModal=lazy(() => import("@/components/profile/PrivacyPolicyModal"));
+const FeedbackModal=lazy(() => import("@/components/profile/FeedbackModal"));
+
+
+import ProfileHeader from "@/components/profile/ProfileHeader";
+import ProfileInfo from "@/components/profile/ProfileInfo";
+import ProfileBio from "@/components/profile/ProfileBio";
+import ProfileActions from "@/components/profile/ProfileActions";
+
+const EditProfileModal =lazy(()=>import("@/components/profile/EditProfileModal"));
+
+
+
+const SettingsModal = lazy(() => import("@/components/profile/SettingsModal"));
+const ChangePasswordModal= lazy(() => import ("@/components/profile/ChangePasswordModal"));
+const LogoutConfirmModal=lazy(() => import("@/components/profile/LogoutConfirmModal"));
+const AIAssistantModal=lazy(() => import("@/components/profile/AIAssistantModal"));
 
 export default function ProfilePage() {
   const router = useRouter();
   useBackToLanding();
 
-  const [username, setUsername] = useState("");
+  const {
+    username,
+    pronoun,
+    bio,
+    avatarDataUrl,
+    loading,
+    postsCount,
+    userPosts,
+    profileLink,
+    setPronoun,
+    setBio,
+    uploadAvatar,
+    saveProfile,
+    shareProfile,
+    changePassword,
+    deleteAccount,
+  } = useProfileData();
 
-
-  const [pronoun, setPronoun] = useState("");
-  const [bio, setBio] = useState("");
-  const [avatarDataUrl, setAvatarDataUrl] = useState("");
-
-  const [loading, setLoading] = useState(true);
-
-  // Modals
+  // local UI-only state
   const [showEdit, setShowEdit] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showAI, setShowAI] = useState(false);
 
-  // Change password fields
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
   const [actionError, setActionError] = useState("");
   const [actionOk, setActionOk] = useState("");
 
-  type Post = {
-  id: string;
-  author: string;
-  mediaType: "image" | "video";
-  mediaDataUrl: string;
-  caption: string;
-  createdAt: string;
-  allowComments: boolean;
-  allowRepost: boolean;
-  likes: string[];
-  reposts: string[];
-  comments: { id: string; username: string; text: string; createdAt: string }[];
-};
 
-  const [qrDataUrl, setQrDataUrl] = useState("");
-  const [postsCount, setPostsCount] = useState(0);
-  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [showAccountActions, setShowAccountActions] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
 
-  const profileLink = useMemo(() => {
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    return `${base}/profile?u=${encodeURIComponent(username || "")}`;
-  }, [username]);
+  function logoutNow() {
+    localStorage.removeItem("currentUser");
+    router.replace("/");
+  }
 
-  useEffect(() => {
-    const u = localStorage.getItem("currentUser") || "";
-    setUsername(u);
+  async function handleUploadAvatar(file: File | null) {
+    setActionError("");
+    setActionOk("");
+    const r = await uploadAvatar(file);
+    if (!r.ok && r.error) setActionError(r.error);
+  }
 
-    async function loadProfile() {
-      if (!u) {
-        setLoading(false);
-        return;
-      }
+async function handleDeletePost(postId: string) {
+  if (!username) return;
 
-      try {
-        const res = await fetch("/api/profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setPronoun(data.profile.pronoun || "");
-          setBio(data.profile.bio || "");
-          setAvatarDataUrl(data.profile.avatarDataUrl || "");
-        
-        }
-const postsRes = await fetch(`/api/posts?username=${encodeURIComponent(u)}`);
-const postsData = await postsRes.json();
-if (postsRes.ok) {
-  setUserPosts(postsData.posts || []);
-  setPostsCount((postsData.posts || []).length);
+  const ok = window.confirm("Are you sure you want to delete this post?");
+  if (!ok) return;
+
+  const res = await fetch(`/api/posts/${encodeURIComponent(postId)}/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    setActionError(data?.error || "Failed to delete post.");
+    return;
+  }
+
+  setActionOk("Post deleted ✅");
+  setTimeout(() => setActionOk(""), 1000);
+
+  // ✅ simplest refresh: reload page data
+  window.location.reload();
 }
-      } 
-      
-      
-      finally {
-        setLoading(false);
-      }
-    }
 
-    loadProfile();
-  }, []);
-  
-  async function onUploadAvatar(file: File | null) {
+
+  async function handleSaveProfile() {
     setActionError("");
     setActionOk("");
-
-    if (!file) return;
-
-    // Accept only jpg/jpeg
-    const isJpg = file.type === "image/jpeg" || file.name.toLowerCase().endsWith(".jpg") || file.name.toLowerCase().endsWith(".jpeg");
-    if (!isJpg) {
-      setActionError("Please upload only JPG/JPEG image.");
+    const r = await saveProfile();
+    if (!r.ok) {
+      setActionError(r.error);
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = String(reader.result || "");
-      setAvatarDataUrl(dataUrl);
-
-      if (!username) return;
-
-      await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, pronoun, bio, avatarDataUrl: dataUrl }),
-      });
-    };
-    reader.readAsDataURL(file);
-  }
-
-  async function openEdit() {
-    setActionError("");
-    setActionOk("");
-    setShowEdit(true);
-
-    // generate QR of profile link
-   
-  }
-
-  async function saveProfile() {
-    setActionError("");
-    setActionOk("");
-
-    if (!username) return;
-
-    const res = await fetch("/api/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, pronoun, bio, avatarDataUrl }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setActionError(data?.error || "Failed to save.");
-      return;
-    }
-
     setActionOk("Saved ✅");
     setTimeout(() => {
       setShowEdit(false);
@@ -159,25 +122,17 @@ if (postsRes.ok) {
     }, 800);
   }
 
-  async function shareProfile() {
+  async function handleShareProfile() {
     setActionError("");
     setActionOk("");
-
-    const text = `My profile: ${profileLink}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "Profile", text, url: profileLink });
-      } else {
-        await navigator.clipboard.writeText(profileLink);
-        setActionOk("Profile link copied ✅");
-        setTimeout(() => setActionOk(""), 1200);
-      }
-    } catch {
-      // ignore
+    const r  = await shareProfile();
+    if (r?.copied) {
+      setActionOk("Profile link copied ✅");
+      setTimeout(() => setActionOk(""), 1200);
     }
   }
 
-  async function changePassword() {
+  async function handleChangePassword() {
     setActionError("");
     setActionOk("");
 
@@ -190,15 +145,9 @@ if (postsRes.ok) {
       return;
     }
 
-    const res = await fetch("/api/change-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, currentPassword, newPassword }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      setActionError(data?.error || "Failed to change password.");
+    const r = await changePassword(currentPassword, newPassword);
+    if (!r.ok) {
+      setActionError(r.error);
       return;
     }
 
@@ -206,131 +155,64 @@ if (postsRes.ok) {
     setCurrentPassword("");
     setNewPassword("");
     setConfirmNewPassword("");
+
     setTimeout(() => {
       setShowChangePassword(false);
       setActionOk("");
     }, 900);
   }
 
-  function logout() {
-    localStorage.removeItem("currentUser");
-    router.replace("/");
-  }
-
-  async function deleteAccount() {
+  async function handleDeleteAccount() {
     setActionError("");
     setActionOk("");
 
     const ok = window.confirm("Are you sure you want to delete your account?");
     if (!ok) return;
 
-    await fetch("/api/delete-account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username }),
-    });
-
-    localStorage.removeItem("currentUser");
-    router.replace("/");
+    const r = await deleteAccount();
+    if (r.ok) {
+      localStorage.removeItem("currentUser");
+      router.replace("/");
+    }
   }
 
+
   return (
+       <Suspense fallback={<div>Loading...</div>}>
     <main className="min-h-screen bg-neutral-50 pb-16">
       <div className="mx-auto max-w-md p-5">
         <div className="rounded-3xl border-2 border-brand-blue bg-white p-5 shadow-soft">
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                {username || "Profile"}
-              </h1>
-              <p className="text-xs text-brand-gray">Mini Social</p>
-            </div>
-
-            <button
-  onClick={() => {
-    if (!username) return;
-    setShowSettings(true);
-  }}
-  disabled={!username}
-  className={`rounded-xl p-2 ${
-    username ? "text-gray-700 hover:bg-gray-100" : "text-gray-300 cursor-not-allowed"
-  }`}
-  title="Settings"
-  aria-label="Settings"
->
-  ⚙️
-</button>
-          </div>
+          <ProfileHeader
+            title={username || "Profile"}
+            onOpenSettings={() => setShowSettings(true)}
+            disabled={!username}
+          />
 
           {loading ? (
             <p className="mt-6 text-sm text-gray-600">Loading...</p>
           ) : !username ? (
-            <p className="mt-6 text-sm text-red-600">
-              No user logged in. Please login again.
-            </p>
+            <p className="mt-6 text-sm text-red-600">No user logged in. Please login again.</p>
           ) : (
             <>
-              <div className="mt-6 flex items-center gap-4">
-                <div className="relative">
-                  <div className="h-20 w-20 overflow-hidden rounded-full border border-gray-200 bg-neutral-100">
-                    {avatarDataUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={avatarDataUrl} alt="avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-2xl">
-                        🙂
-                      </div>
-                    )}
-                  </div>
+              <ProfileInfo
+                avatarDataUrl={avatarDataUrl}
+                onUploadAvatar={handleUploadAvatar}
+                postsCount={postsCount}
+                pronoun={pronoun}
+              />
 
-                  <label
-                    className="absolute bottom-0 right-0 cursor-pointer rounded-full bg-brand-blue px-2 py-1 text-xs text-white shadow"
-                    title="Upload JPG"
-                  >
-                    📷
-                    <input
-                      type="file"
-                      accept="image/jpeg,.jpg,.jpeg"
-                      className="hidden"
-                      onChange={(e) => onUploadAvatar(e.target.files?.[0] || null)}
-                    />
-                  </label>
-                </div>
+              <ProfileBio bio={bio} />
 
-                <div className="flex-1">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">{postsCount}</span> posts
-                  </p>
-                  <p className="mt-1 text-sm text-gray-700">
-                    <span className="text-gray-500">Pronoun:</span>{" "}
-                    {pronoun || <span className="text-gray-400">empty</span>}
-                  </p>
-                </div>
-              </div>
+              <ProfileActions
+                onEdit={() => setShowEdit(true)}
+                onShare={handleShareProfile}
+              />
 
-              <div className="mt-4 rounded-2xl bg-neutral-50 p-4">
-                <p className="text-sm text-gray-700">
-                  <span className="font-semibold">Bio:</span>{" "}
-                  {bio || <span className="text-gray-400">empty</span>}
-                </p>
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <button
-                  onClick={openEdit}
-                  className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
-                  Edit Profile
-                </button>
-
-                <button
-                  onClick={shareProfile}
-                  className="rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:opacity-95"
-                >
-                  Share Profile
-                </button>
-              </div>
-
+            <UserPostsGrid
+  posts={userPosts}
+  canDelete={true}
+  onDelete={handleDeletePost}
+/>
               {actionError ? <p className="mt-3 text-sm text-red-600">{actionError}</p> : null}
               {actionOk ? <p className="mt-3 text-sm text-green-600">{actionOk}</p> : null}
             </>
@@ -340,190 +222,88 @@ if (postsRes.ok) {
 
       <BottomNav />
 
-      {/* Edit Modal */}
-      {showEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-semibold text-gray-900">Edit Profile</h2>
+      <EditProfileModal
+        open={showEdit}
+        username={username}
+        pronoun={pronoun}
+        bio={bio}
+        userPosts={userPosts}
+        onChangePronoun={setPronoun}
+        onChangeBio={setBio}
+        onClose={() => setShowEdit(false)}
+        onSave={handleSaveProfile}
+      />
 
-            <div className="mt-4 space-y-3">
-              
-<label className="mb-1 block text-xs font-semibold text-gray-600">
-      Username
-    </label>
+    <SettingsModal
+  open={showSettings}
+  onClose={() => setShowSettings(false)}
+  onAccountActions={() => {
+    setShowSettings(false);
+    setShowAccountActions(true);
+  }}
+  onAI={() => {
+    setShowSettings(false);
+    setShowAI(true);
+  }}
+  onPrivacy={() => {
+    setShowSettings(false);
+    setShowPrivacy(true);
+  }}
+  onFeedback={() => {
+    setShowSettings(false);
+    setShowFeedback(true);
+  }}
+  onLogout={() => {
+    setShowSettings(false);
+    setShowLogoutConfirm(true);
+  }}
+/>
 
-              <input
-                value={username}
-                disabled
-                className="w-full cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600"
-              />
-              <div>
-                
-<label className="mb-1 block text-xs font-semibold text-gray-600">
-      Pronoun
-    </label>
+      <ChangePasswordModal
+        open={showChangePassword}
+        currentPassword={currentPassword}
+        newPassword={newPassword}
+        confirmNewPassword={confirmNewPassword}
+        setCurrentPassword={setCurrentPassword}
+        setNewPassword={setNewPassword}
+        setConfirmNewPassword={setConfirmNewPassword}
+        actionError={actionError}
+        actionOk={actionOk}
+        onCancel={() => setShowChangePassword(false)}
+        onUpdate={handleChangePassword}
+      />
 
-              <input
-                placeholder="Pronoun (e.g. he/him, she/her, they/them)"
-                value={pronoun}
-                onChange={(e) => setPronoun(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-              />
-              </div>
-<div>
-  
- <label className="mb-1 block text-xs font-semibold text-gray-600">
-      Bio
-    </label>
-    
+      <LogoutConfirmModal
+        open={showLogoutConfirm}
+        onCancel={() => setShowLogoutConfirm(false)}
+        onLogout={() => {
+          setShowLogoutConfirm(false);
+          logoutNow();
+        }}
+      />
 
-              <textarea
-                placeholder="Write something about yourself."
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-              />
-</div>
+      <AIAssistantModal open={showAI} onClose={() => setShowAI(false)} />
+      <AccountActionsModal
+  open={showAccountActions}
+  onClose={() => setShowAccountActions(false)}
+  onChangePassword={() => {
+    setShowAccountActions(false);
+    setShowChangePassword(true);
+  }}
+  onDeleteAccount={handleDeleteAccount}
+/>
 
+<PrivacyPolicyModal open={showPrivacy} onClose={() => setShowPrivacy(false)} />
 
-<div className="mt-5">
-  <h3 className="text-sm font-semibold text-gray-900">Posts</h3>
+<FeedbackModal
+  open={showFeedback}
+  onClose={() => setShowFeedback(false)}
+  username={username}
+/>
 
-  {userPosts.length === 0 ? (
-    <p className="mt-2 text-sm text-gray-600">No posts yet.</p>
-  ) : (
-    <div className="mt-3 grid grid-cols-3 gap-2">
-      {userPosts.map((p) => (
-        <div key={p.id} className="aspect-square overflow-hidden rounded-xl border border-gray-200 bg-neutral-100">
-          {p.mediaType === "image" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.mediaDataUrl} alt="post" className="h-full w-full object-cover" />
-          ) : (
-            <video className="h-full w-full object-cover">
-              <source src={p.mediaDataUrl} />
-            </video>
-          )}
-        </div>
-      ))}
-    </div>
-  )}
-</div>
-              <div className="mt-2 flex gap-3">
-                <button
-                  onClick={() => setShowEdit(false)}
-                  className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={saveProfile}
-                  className="flex-1 rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:opacity-95"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
-
-            <div className="mt-4 space-y-2">
-              <button
-                onClick={() => {
-                  setShowSettings(false);
-                  setShowChangePassword(true);
-                }}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Change Password
-              </button>
-
-              <button
-                onClick={logout}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Logout
-              </button>
-
-              <button
-                onClick={deleteAccount}
-                className="w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
-              >
-                Delete Account
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowSettings(false)}
-              className="mt-4 w-full rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:opacity-95"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password Modal */}
-      {showChangePassword && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
-            <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
-            <p className="mt-1 text-xs text-gray-600">
-              New password must be 8+ chars with uppercase, lowercase, number & symbol.
-            </p>
-
-            <div className="mt-4 space-y-3">
-              <input
-                type="password"
-                placeholder="Current password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-              />
-              <input
-                type="password"
-                placeholder="New password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-              />
-              <input
-                type="password"
-                placeholder="Confirm new password"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-              />
-
-              {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
-              {actionOk ? <p className="text-sm text-green-600">{actionOk}</p> : null}
-
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={() => setShowChangePassword(false)}
-                  className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={changePassword}
-                  className="flex-1 rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:opacity-95"
-                >
-                  Update
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
+       </Suspense>
+    
   );
+
 }

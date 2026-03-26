@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { addUser, findUserByEmail, findUserByUsername } from "@/lib/userStore";
-
+import { hashPassword } from "@/lib/password";
 function isStrongPassword(password: string) {
   // At least 8, one uppercase, one lowercase, one number, one symbol
   const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -46,11 +46,11 @@ let email = rawEmail;
     if (existingEmail) {
       return NextResponse.json({ error: "Email already exists." }, { status: 409 });
     }
-
+const hashed = await hashPassword(password);
     await addUser({
       username,
       email,
-      password,
+      password:hashed,
       createdAt: new Date().toISOString(),
     });
 
