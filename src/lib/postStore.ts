@@ -1,113 +1,76 @@
-import { promises as fs } from "fs";
-import path from "path";
+import clientPromise from "./mongodb";
 
 export type Post = {
   id: string;
   author: string;
   mediaType: "image" | "video";
-  mediaDataUrl: string; // base64 data url (learning)
+  mediaDataUrl: string;
   caption: string;
   allowComments: boolean;
   allowRepost: boolean;
   createdAt: string;
-  likes: string[]; // usernames
-  reposts: string[]; // usernames
+  likes: string[];
+  reposts: string[];
   comments: { id: string; username: string; text: string; createdAt: string }[];
 };
 
-const filePath = path.join(process.cwd(), "src", "data", "posts.json");
+const DB_NAME = "socialApp";
+const COLLECTION = "posts";
 
-/**
- * Simple in-memory cache (server runtime only)
- * - Speeds up repeated reads (GET /api/posts, findPost, etc.)
- * - Invalidate cache whenever data is written
- */
-let postsCache: Post[] | null = null;
-let postsCacheAt = 0;
-
-// You can tune this (10s–30s is common for demo apps)
-const POSTS_CACHE_TTL_MS = 15_000;
-
-export function invalidatePostsCache() {
-  postsCache = null;
-  postsCacheAt = 0;
-}
-
+// 📥 Get all posts
 export async function readPosts(): Promise<Post[]> {
-  try {
-    // Return cached posts if TTL not expired
-    if (postsCache && Date.now() - postsCacheAt < POSTS_CACHE_TTL_MS) {
-      return postsCache;
-    }
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
 
-    const data = await fs.readFile(filePath, "utf-8");
-    const parsed = JSON.parse(data || "[]") as Post[];
+  const posts = await db
+    .collection(COLLECTION)
+    .find()
+    .sort({ createdAt: -1 }) // newest first
+    .toArray();
 
-    // Update cache
-    postsCache = parsed;
-    postsCacheAt = Date.now();
-
-    return parsed;
-  } catch {
-    // Cache empty list too (avoid repeated disk reads when file missing)
-    postsCache = [];
-    postsCacheAt = Date.now();
-    return [];
-  }
+  return posts as unknown as Post[];
 }
 
-export async function writePosts(posts: Post[]) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(posts, null, 2), "utf-8");
-
-  // Update cache immediately with the latest data
-  postsCache = posts;
-  postsCacheAt = Date.now();
-}
-
+// ➕ Add post
 export async function addPost(post: Post) {
-  const posts = await readPosts();
-  posts.unshift(post); // newest first
-  await writePosts(posts);
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
 
-  // writePosts already updates cache, but keeping invalidation is safe
-  // invalidatePostsCache();
-
+  await db.collection(COLLECTION).insertOne(post);
   return post;
 }
 
-export async function updatePost(postId: string, updater: (p: Post) => Post) {
-  const posts = await readPosts();
-  const idx = posts.findIndex((p) => p.id === postId);
-  if (idx === -1) return null;
-
-  posts[idx] = updater(posts[idx]);
-  await writePosts(posts);
-
-  // writePosts already updates cache
-  // invalidatePostsCache();
-
-  return posts[idx];
-}
-
+// 🔍 Find post
 export async function findPost(postId: string) {
-  const posts = await readPosts();
-  return posts.find((p) => p.id === postId) || null;
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+
+  return db.collection(COLLECTION).findOne({ id: postId });
 }
 
+// ✏️ Update post
+export async function updatePost(postId: string, updater: (p: Post) => Post) {
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+
+  const existing = await db.collection(COLLECTION).findOne({ id: postId });
+  if (!existing) return null;
+
+  const updated = updater(existing as unknown as Post);
+
+  await db.collection(COLLECTION).updateOne(
+    { id: postId },
+    { $set: updated }
+  );
+
+  return updated;
+}
+
+// ❌ Delete post
 export async function deletePostById(postId: string) {
-  const posts = await readPosts();
-  const filtered = posts.filter((p) => p.id !== postId);
-  await writePosts(filtered);
-  if (postsCache && Date.now() - postsCacheAt < POSTS_CACHE_TTL_MS) {
-  console.log("[CACHE HIT] readPosts served from memory cache");
-  return postsCache;
-}
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
 
-console.log("[CACHE MISS] reading posts from disk");
-
-  // writePosts already updates cache
-  // invalidatePostsCache();
-
+  await db.collection(COLLECTION).deleteOne({ id: postId });
   return true;
 }

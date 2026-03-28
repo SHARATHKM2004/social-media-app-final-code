@@ -3,8 +3,8 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { addUser, findUserByEmail, findUserByUsername } from "@/lib/userStore";
 import { hashPassword } from "@/lib/password";
+
 function isStrongPassword(password: string) {
-  // At least 8, one uppercase, one lowercase, one number, one symbol
   const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
   return regex.test(password);
 }
@@ -13,26 +13,25 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-const { password, username: rawUsername, email: rawEmail } = body as {
-  username: string;
-  email: string;
-  password: string;
-};
+    const { password, username: rawUsername, email: rawEmail } = body as {
+      username: string;
+      email: string;
+      password: string;
+    };
 
-let username = rawUsername;
-let email = rawEmail;
-
+    const username = rawUsername?.trim();
+    const email = rawEmail?.trim().toLowerCase();
 
     if (!username || !email || !password) {
       return NextResponse.json({ error: "All fields are required." }, { status: 400 });
     }
 
-    username = username.trim();
-    email = email.trim().toLowerCase();
-
     if (!isStrongPassword(password)) {
       return NextResponse.json(
-        { error: "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol." },
+        {
+          error:
+            "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
+        },
         { status: 400 }
       );
     }
@@ -46,16 +45,19 @@ let email = rawEmail;
     if (existingEmail) {
       return NextResponse.json({ error: "Email already exists." }, { status: 409 });
     }
-const hashed = await hashPassword(password);
+
+    const hashed = await hashPassword(password);
+
     await addUser({
       username,
       email,
-      password:hashed,
+      password: hashed,
       createdAt: new Date().toISOString(),
     });
 
     return NextResponse.json({ ok: true, username }, { status: 200 });
-  } catch {
+  } catch (err) {
+    console.error(err); // 🔥 important for debugging
     return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }
