@@ -20,6 +20,7 @@ export async function GET(req: Request) {
       .map((u) => ({
         username: u.username,
         avatarDataUrl: u.avatarDataUrl || "",
+        bio: u.bio || "",
       }));
 
     return NextResponse.json({ ok: true, users: matched }, { status: 200 });
@@ -27,3 +28,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }
+``
