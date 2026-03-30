@@ -111,23 +111,31 @@ useEffect(() => {
   loadFromServer();
 }, [currentUser, otherUser]);
 
-  async function send() {
+async function send() {
   const msgText = text.trim();
   if (!msgText || !currentUser) return;
 
-  // 1) Send message to server
-  const res = await fetch("/api/messages/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from: currentUser, to: otherUser, text: msgText }),
-  });
+  try {
+    const res = await fetch("/api/messages/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from: currentUser, to: otherUser, text: msgText }),
+    });
 
-  const data = await res.json();
-  if (!res.ok) return;
+    const data = await res.json().catch(() => null);
+    console.log("SEND:", res.status, data);
 
-  // 2) Add the sent message to UI immediately
-  setMessages((prev) => [...prev, data.msg]);
-  setText("");
+    if (!res.ok) {
+      alert(data?.error || "Failed to send message");
+      return;
+    }
+
+    setMessages((prev) => [...prev, data.msg]);
+    setText("");
+  } catch (e) {
+    console.error("Send error:", e);
+    alert("Network error while sending message");
+  }
 }
   // Date separators
   
