@@ -230,7 +230,7 @@ export default function HomeClient({
                 {/* Feed mode header */}
                 <div className="mt-2 flex items-center justify-between">
                   <p className="text-sm text-gray-600">Feed</p>
-                  <select
+                  <select aria-label="Sort posts"
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value as "latest" | "trending")}
                     className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"

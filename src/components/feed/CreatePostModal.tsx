@@ -116,6 +116,8 @@ export default function CreatePostModal({
             <label className="mb-1 block text-xs font-semibold text-gray-600">Upload</label>
             <input
               type="file"
+            
+  aria-label="Upload media"
               accept="image/*,video/*"
               onChange={(e) => onPickMedia(e.target.files?.[0] || null)}
               className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
