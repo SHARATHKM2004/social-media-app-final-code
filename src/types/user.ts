@@ -1,5 +1,5 @@
-
 export type SearchUser = {
   username: string;
-  avatarDataUrl: string;
+  avatarDataUrl?: string;
+  bio?: string;
 };
