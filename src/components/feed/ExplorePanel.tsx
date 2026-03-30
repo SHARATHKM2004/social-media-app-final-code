@@ -100,7 +100,15 @@ export default function ExplorePanel({
 
               <div className="flex-1">
                 <p className="text-sm font-semibold text-gray-900">{u.username}</p>
-                <p className="text-xs text-gray-500">Tap to view profile</p>
+
+                {/* ✅ BIO goes here */}
+                {u.bio?.trim() ? (
+                  <p className="text-xs text-gray-600 line-clamp-1">{u.bio}</p>
+                ) : (
+                  <p className="text-xs text-gray-400">No bio</p>
+                )}
+
+                <p className="mt-1 text-xs text-gray-500">Tap to view profile</p>
               </div>
             </Link>
           ))}
