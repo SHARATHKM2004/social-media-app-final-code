@@ -25,14 +25,30 @@ export default function FeedPostCard({
   onShowLikes: () => void;
   onShowReposts: () => void;
 }) {
+  // Backward-safe: in case old posts don't have this field yet
+  const authorAvatarDataUrl =
+    (post as any).authorAvatarDataUrl ||
+    (post as any).authorAvatar ||
+    "";
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-neutral-100 border border-gray-200 flex items-center justify-center">
-            🙂
+          <div className="h-8 w-8 rounded-full bg-neutral-100 border border-gray-200 overflow-hidden flex items-center justify-center">
+            {authorAvatarDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={authorAvatarDataUrl}
+                alt={`${post.author} avatar`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span>🙂</span>
+            )}
           </div>
+
           <div>
             <p className="text-sm font-semibold text-gray-900">{post.author}</p>
             <p className="text-xs text-gray-500">{timeAgo(post.createdAt)}</p>
@@ -53,11 +69,11 @@ export default function FeedPostCard({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={post.mediaDataUrl}
-            alt="post"
-            className="w-full max-h-[420px] object-contain bg-white"
+            alt="post media"
+            className="w-full object-cover"
           />
         ) : (
-          <video controls className="w-full max-h-[420px] bg-black">
+          <video className="w-full" controls>
             <source src={post.mediaDataUrl} />
           </video>
         )}
@@ -65,28 +81,18 @@ export default function FeedPostCard({
 
       {/* Content */}
       <div className="px-4 py-3">
-        {post.caption ? <p className="text-sm text-gray-800">{post.caption}</p> : null}
+        {post.caption ? (
+          <p className="text-sm text-gray-900 whitespace-pre-wrap">{post.caption}</p>
+        ) : null}
 
-        <div className="mt-3 flex items-center gap-4 text-sm">
-          <button onClick={onLike} className="rounded-lg px-2 py-1 hover:bg-gray-100">
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <button onClick={onLike} className="text-gray-700 hover:text-gray-900">
             ❤️ Like
           </button>
-
-          <button
-            onClick={onOpenComments}
-            className="rounded-lg px-2 py-1 hover:bg-gray-100"
-            disabled={!post.allowComments}
-            title={!post.allowComments ? "Comments disabled" : "Comments"}
-          >
+          <button onClick={onOpenComments} className="text-gray-700 hover:text-gray-900">
             💬 Comment
           </button>
-
-          <button
-            onClick={onRepost}
-            className="rounded-lg px-2 py-1 hover:bg-gray-100"
-            disabled={!post.allowRepost}
-            title={!post.allowRepost ? "Repost disabled" : "Repost"}
-          >
+          <button onClick={onRepost} className="text-gray-700 hover:text-gray-900">
             🔁 Repost
           </button>
         </div>
@@ -95,9 +101,7 @@ export default function FeedPostCard({
           <button onClick={onShowLikes} className="hover:underline">
             {post.likes.length} likes
           </button>
-          <button onClick={onOpenComments} className="hover:underline">
-            {post.comments.length} comments
-          </button>
+          <span>{post.comments.length} comments</span>
           <button onClick={onShowReposts} className="hover:underline">
             {post.reposts.length} reposts
           </button>
