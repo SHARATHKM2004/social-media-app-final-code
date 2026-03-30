@@ -21,6 +21,9 @@ export default function CreatePostModal({
   const [createError, setCreateError] = useState("");
   const [posting, setPosting] = useState(false);
 
+  // ✅ NEW
+  const [successMsg, setSuccessMsg] = useState("");
+
   useEffect(() => {
     if (!open) return;
 
@@ -32,6 +35,9 @@ export default function CreatePostModal({
     setAllowRepost(true);
     setCreateError("");
     setPosting(false);
+
+    // ✅ NEW
+    setSuccessMsg("");
   }, [open]);
 
   async function onPickMedia(file: File | null) {
@@ -54,7 +60,7 @@ export default function CreatePostModal({
 
     const reader = new FileReader();
     reader.onload = () => {
-      const url = String(reader.result || "");
+      const url = String(reader.result ?? "");
       setMediaDataUrl(url);
       setMediaType(isVideo ? "video" : "image");
     };
@@ -63,6 +69,7 @@ export default function CreatePostModal({
 
   async function createPost() {
     setCreateError("");
+    setSuccessMsg("");
 
     if (!currentUser) {
       setCreateError("Please login again.");
@@ -75,6 +82,7 @@ export default function CreatePostModal({
     }
 
     setPosting(true);
+
     try {
       const res = await fetch("/api/posts", {
         method: "POST",
@@ -97,7 +105,12 @@ export default function CreatePostModal({
       }
 
       await onPosted(); // refresh feed
-      onClose();
+
+      // ✅ NEW: show popup message then close quickly
+      setSuccessMsg("Post created.");
+      setTimeout(() => {
+        onClose(); // close modal
+      }, 800);
     } finally {
       setPosting(false);
     }
@@ -107,7 +120,14 @@ export default function CreatePostModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-soft">
+        {/* ✅ Success popup (same modal place) */}
+        {successMsg ? (
+          <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow">
+            {successMsg}
+          </div>
+        ) : null}
+
         <h2 className="text-lg font-semibold text-gray-900">Create Post</h2>
         <p className="mt-1 text-xs text-gray-600">Upload an image/video and add a caption</p>
 
@@ -116,8 +136,7 @@ export default function CreatePostModal({
             <label className="mb-1 block text-xs font-semibold text-gray-600">Upload</label>
             <input
               type="file"
-            
-  aria-label="Upload media"
+              aria-label="Upload media"
               accept="image/*,video/*"
               onChange={(e) => onPickMedia(e.target.files?.[0] || null)}
               className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
@@ -176,17 +195,18 @@ export default function CreatePostModal({
           <div className="mt-2 flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              disabled={posting}
+              className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
             >
               Cancel
             </button>
 
             <button
               onClick={createPost}
-              disabled={posting}
+              disabled={posting || !!successMsg}
               className="flex-1 rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
             >
-              {posting ? "Posting..." : "Post"}
+              {posting ? "Posting..." : successMsg ? "Done" : "Post"}
             </button>
           </div>
         </div>
