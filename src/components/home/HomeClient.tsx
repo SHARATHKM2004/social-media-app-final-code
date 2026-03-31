@@ -14,6 +14,10 @@ const UserListModal = lazy(() => import("@/components/feed/UserListModal"));
 const CommentsModal = lazy(() => import("@/components/feed/CommentsModal"));
 const CreatePostModal = lazy(() => import("@/components/feed/CreatePostModal"));
 
+// ✅ Notifications modal
+const NotificationsModal = lazy(() => import("@/components/notifications/NotificationsModal"));
+import type { NotificationItem } from "@/components/notifications/NotificationsModal";
+
 // Redux
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "@/store/store";
@@ -36,8 +40,10 @@ export default function HomeClient({
 }: HomeClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const tab = searchParams?.get("tab") || "";
   const modal = searchParams?.get("modal") || "";
+  const focusPostId = searchParams?.get("postId") || ""; // ✅ for notification deep-link
 
   const PAGE_SIZE = initialLimit || 10;
 
@@ -48,7 +54,7 @@ export default function HomeClient({
     setCurrentUser(user);
   }, []);
 
-  // ✅ Local fallback posts (guarantees feed shows even if Redux stays empty)
+  // ✅ Local fallback posts
   const [clientPosts, setClientPosts] = useState<Post[]>([]);
 
   // ✅ Lighthouse / Perf controls
@@ -66,13 +72,13 @@ export default function HomeClient({
 
   // Redux
   const dispatch = useDispatch<AppDispatch>();
-  const posts = useSelector((state: RootState) => state.posts.items) as Post[]; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
-  const feedLoading = useSelector((state: RootState) => state.posts.loading) as boolean; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
-  const feedError = useSelector((state: RootState) => state.posts.error) as string; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
-  const currentPage = useSelector((state: RootState) => state.posts.page) as number; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
-  const hasMore = useSelector((state: RootState) => state.posts.hasMore) as boolean; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
+  const posts = useSelector((state: RootState) => state.posts.items) as Post[];
+  const feedLoading = useSelector((state: RootState) => state.posts.loading) as boolean;
+  const feedError = useSelector((state: RootState) => state.posts.error) as string;
+  const currentPage = useSelector((state: RootState) => state.posts.page) as number;
+  const hasMore = useSelector((state: RootState) => state.posts.hasMore) as boolean;
 
-  // ✅ Hydrate Redux only when SSR provided posts (we are using [] for Lighthouse)
+  // ✅ Hydrate Redux only when SSR provided posts
   useEffect(() => {
     if (initialPosts && initialPosts.length > 0) {
       dispatch(
@@ -88,13 +94,12 @@ export default function HomeClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, initialPosts, initialPage, initialLimit, initialTotal, initialHasMore]);
 
-  // ✅ Auto-fetch ONCE when SSR initialPosts is empty (fixes empty feed)
+  // ✅ Auto-fetch ONCE when SSR initialPosts is empty (fix empty feed)
   const didAutoFetch = useRef(false);
-
   useEffect(() => {
     if (didAutoFetch.current) return;
     if (tab === "explore") return;
-    if (initialPosts && initialPosts.length > 0) return; // SSR already had posts
+    if (initialPosts && initialPosts.length > 0) return;
     if (feedLoading) return;
     if (posts && posts.length > 0) return;
     if (clientPosts && clientPosts.length > 0) return;
@@ -105,14 +110,9 @@ export default function HomeClient({
       try {
         const res = await fetch(`/api/posts?page=1&limit=${PAGE_SIZE}`, { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
-
         if (res.ok) {
           const list = (data?.posts || []) as Post[];
-
-          // ✅ Set local posts (guaranteed UI update)
           setClientPosts(list);
-
-          // ✅ Also try to hydrate Redux (if slice supports it)
           dispatch(
             setInitialPosts({
               posts: list,
@@ -124,7 +124,7 @@ export default function HomeClient({
           );
         }
       } catch {
-        // keep silent for demo
+        // silent
       }
     }, 700);
 
@@ -178,7 +178,7 @@ export default function HomeClient({
   const [showList, setShowList] = useState<{ title: string; users: string[] } | null>(null);
   const [showComments, setShowComments] = useState<Post | null>(null);
 
-  // ✅ Use Redux posts if available, otherwise fallback to clientPosts
+  // ✅ Effective posts
   const effectivePosts = posts && posts.length > 0 ? posts : clientPosts;
 
   const [sortMode, setSortMode] = useState<"latest" | "trending">("latest");
@@ -194,7 +194,11 @@ export default function HomeClient({
     return list.sort((a, b) => trendingScore(b) - trendingScore(a));
   }, [effectivePosts, sortMode]);
 
-  // Lighthouse: show only 1 post first, then all
+  // If user deep-links to a post (notification click), ensure we render all posts
+  useEffect(() => {
+    if (focusPostId) setRenderAllPosts(true);
+  }, [focusPostId]);
+
   const visiblePosts = renderAllPosts ? sortedPosts : sortedPosts.slice(0, 1);
 
   function closeCreateModal() {
@@ -250,12 +254,119 @@ export default function HomeClient({
     dispatch(fetchPosts({ page: (currentPage || 1) + 1, limit: PAGE_SIZE }));
   }
 
+  // ---------------------------
+  // ✅ Notifications wiring
+  // ---------------------------
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifItems, setNotifItems] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  async function loadNotifications() {
+    if (!currentUser) return;
+    setNotifLoading(true);
+    try {
+      const res = await fetch(`/api/notifications?user=${encodeURIComponent(currentUser)}&limit=50`, {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setNotifItems((data.items || []) as NotificationItem[]);
+        setUnreadCount(Number(data.unreadCount || 0));
+      }
+    } finally {
+      setNotifLoading(false);
+    }
+  }
+
+  // poll every 5s
+  useEffect(() => {
+    if (!currentUser) return;
+    let alive = true;
+
+    const tick = async () => {
+      if (!alive) return;
+      await loadNotifications();
+    };
+
+    tick();
+    const id = window.setInterval(tick, 5000);
+
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
+
+  async function markAllNotificationsRead() {
+    if (!currentUser) return;
+    await fetch("/api/notifications/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: currentUser }),
+    }).catch(() => null);
+
+    // update UI immediately
+    setUnreadCount(0);
+    setNotifItems((prev) => prev.map((x) => ({ ...x, read: true })));
+  }
+
+  async function openNotifications() {
+    setNotifOpen(true);
+    await loadNotifications();
+    if (unreadCount > 0) await markAllNotificationsRead();
+  }
+
+  function closeNotifications() {
+    setNotifOpen(false);
+  }
+
+  // notification click -> go to post
+  function onOpenNotificationItem(n: NotificationItem) {
+    // Close modal first
+    setNotifOpen(false);
+
+    // Preserve existing tab param if any, but go to feed (no explore)
+    const params = new URLSearchParams(window.location.search);
+    params.delete("tab");
+    params.delete("modal");
+    params.set("postId", n.postId);
+
+    router.push(`/home?${params.toString()}`);
+
+    // If comment notification, open comments after scroll (we will do in scroll effect)
+    if (n.type === "comment") {
+      params.set("openComments", "1");
+      router.push(`/home?${params.toString()}`);
+    }
+  }
+
+  // ✅ Scroll + highlight when postId is present
+  useEffect(() => {
+    if (!focusPostId) return;
+    // ensure post exists in DOM
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`post-${focusPostId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-brand-blue");
+        window.setTimeout(() => {
+          el.classList.remove("ring-2", "ring-brand-blue");
+        }, 2000);
+      }
+    }, 600);
+
+    return () => window.clearTimeout(t);
+  }, [focusPostId, renderAllPosts]);
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <main className="min-h-screen bg-neutral-50 pb-16">
         <div className="mx-auto max-w-md p-5">
           <div className="rounded-3xl border-2 border-brand-blue bg-white p-5 shadow-soft">
-            <HomeTopBar />
+            {/* ✅ HomeTopBar now gets unreadCount + click handler */}
+            <HomeTopBar unreadCount={unreadCount} onOpenNotifications={openNotifications} />
 
             {tab === "explore" ? (
               <ExplorePanel
@@ -295,19 +406,20 @@ export default function HomeClient({
                   ) : null}
 
                   {visiblePosts.map((p) => (
-                    <FeedPostCard
-                      key={p.id}
-                      post={p}
-                      postMenuOpen={postMenuId === p.id}
-                      onToggleMenu={() => setPostMenuId((v) => (v === p.id ? null : p.id))}
-                      onCloseMenu={() => setPostMenuId(null)}
-                      onLike={() => handleLike(p.id)}
-                      onOpenComments={() => setShowComments(p)}
-                      onRepost={() => handleRepost(p)}
-                      onShowLikes={() => setShowList({ title: "Liked by", users: p.likes })}
-                      onShowReposts={() => setShowList({ title: "Reposted by", users: p.reposts })}
-                      deferMedia={!mediaReady}
-                    />
+                    <div key={p.id} id={`post-${p.id}`} className="rounded-2xl">
+                      <FeedPostCard
+                        post={p}
+                        postMenuOpen={postMenuId === p.id}
+                        onToggleMenu={() => setPostMenuId((v) => (v === p.id ? null : p.id))}
+                        onCloseMenu={() => setPostMenuId(null)}
+                        onLike={() => handleLike(p.id)}
+                        onOpenComments={() => setShowComments(p)}
+                        onRepost={() => handleRepost(p)}
+                        onShowLikes={() => setShowList({ title: "Liked by", users: p.likes })}
+                        onShowReposts={() => setShowList({ title: "Reposted by", users: p.reposts })}
+                        deferMedia={!mediaReady}
+                      />
+                    </div>
                   ))}
 
                   {hasMore ? (
@@ -329,6 +441,7 @@ export default function HomeClient({
 
         <BottomNav />
 
+        {/* Create Post Modal */}
         <CreatePostModal
           open={modal === "create"}
           currentUser={currentUser}
@@ -338,10 +451,12 @@ export default function HomeClient({
           }}
         />
 
+        {/* Likes/Reposts List Modal */}
         {showList && (
           <UserListModal title={showList.title} users={showList.users} onClose={() => setShowList(null)} />
         )}
 
+        {/* Comments Modal */}
         {showComments && (
           <CommentsModal
             post={showComments}
@@ -354,6 +469,18 @@ export default function HomeClient({
             }}
           />
         )}
+
+        {/* ✅ Notifications Modal */}
+        <Suspense fallback={null}>
+          <NotificationsModal
+            open={notifOpen}
+            items={notifItems}
+            loading={notifLoading}
+            onClose={closeNotifications}
+            onOpenItem={onOpenNotificationItem}
+            onMarkAllRead={markAllNotificationsRead}
+          />
+        </Suspense>
       </main>
     </Suspense>
   );
