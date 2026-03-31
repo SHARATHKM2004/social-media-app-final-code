@@ -18,6 +18,11 @@ const CreatePostModal = lazy(() => import("@/components/feed/CreatePostModal"));
 const NotificationsModal = lazy(() => import("@/components/notifications/NotificationsModal"));
 import type { NotificationItem } from "@/components/notifications/NotificationsModal";
 
+// ✅ Stories components
+const StoriesTray = lazy(() => import("@/components/stories/StoriesTray"));
+const StoryUploadModal = lazy(() => import("@/components/stories/StoryUploadModal"));
+const StoryViewerModal = lazy(() => import("@/components/stories/StoryViewerModal"));
+
 // Redux
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "@/store/store";
@@ -43,7 +48,7 @@ export default function HomeClient({
 
   const tab = searchParams?.get("tab") || "";
   const modal = searchParams?.get("modal") || "";
-  const focusPostId = searchParams?.get("postId") || ""; // ✅ for notification deep-link
+  const focusPostId = searchParams?.get("postId") || "";
 
   const PAGE_SIZE = initialLimit || 10;
 
@@ -53,6 +58,12 @@ export default function HomeClient({
     const user = window.localStorage.getItem("currentUser") || "";
     setCurrentUser(user);
   }, []);
+
+  // ✅ Stories state
+  const [storiesRefreshKey, setStoriesRefreshKey] = useState(0);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerUser, setViewerUser] = useState("");
 
   // ✅ Local fallback posts
   const [clientPosts, setClientPosts] = useState<Post[]>([]);
@@ -194,7 +205,7 @@ export default function HomeClient({
     return list.sort((a, b) => trendingScore(b) - trendingScore(a));
   }, [effectivePosts, sortMode]);
 
-  // If user deep-links to a post (notification click), ensure we render all posts
+  // If user deep-links to a post, ensure we render all posts
   useEffect(() => {
     if (focusPostId) setRenderAllPosts(true);
   }, [focusPostId]);
@@ -255,7 +266,7 @@ export default function HomeClient({
   }
 
   // ---------------------------
-  // ✅ Notifications wiring
+  // ✅ Notifications wiring (unchanged)
   // ---------------------------
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -279,23 +290,12 @@ export default function HomeClient({
     }
   }
 
-  // poll every 5s
   useEffect(() => {
     if (!currentUser) return;
-    let alive = true;
-
-    const tick = async () => {
-      if (!alive) return;
-      await loadNotifications();
-    };
-
+    const tick = async () => loadNotifications();
     tick();
     const id = window.setInterval(tick, 5000);
-
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
+    return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
@@ -307,7 +307,6 @@ export default function HomeClient({
       body: JSON.stringify({ user: currentUser }),
     }).catch(() => null);
 
-    // update UI immediately
     setUnreadCount(0);
     setNotifItems((prev) => prev.map((x) => ({ ...x, read: true })));
   }
@@ -322,50 +321,58 @@ export default function HomeClient({
     setNotifOpen(false);
   }
 
-  // notification click -> go to post
   function onOpenNotificationItem(n: NotificationItem) {
-    // Close modal first
+    if (n.type === "story_like") {
+  setNotifOpen(false);
+  setViewerUser(currentUser); // open YOUR story
+  setViewerOpen(true);
+  return;
+}
     setNotifOpen(false);
-
-    // Preserve existing tab param if any, but go to feed (no explore)
+    
     const params = new URLSearchParams(window.location.search);
     params.delete("tab");
     params.delete("modal");
     params.set("postId", n.postId);
-
     router.push(`/home?${params.toString()}`);
-
-    // If comment notification, open comments after scroll (we will do in scroll effect)
-    if (n.type === "comment") {
-      params.set("openComments", "1");
-      router.push(`/home?${params.toString()}`);
-    }
+    
   }
 
-  // ✅ Scroll + highlight when postId is present
+  // scroll + highlight
   useEffect(() => {
     if (!focusPostId) return;
-    // ensure post exists in DOM
     const t = window.setTimeout(() => {
       const el = document.getElementById(`post-${focusPostId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.add("ring-2", "ring-brand-blue");
-        window.setTimeout(() => {
-          el.classList.remove("ring-2", "ring-brand-blue");
-        }, 2000);
+        window.setTimeout(() => el.classList.remove("ring-2", "ring-brand-blue"), 2000);
       }
     }, 600);
-
     return () => window.clearTimeout(t);
   }, [focusPostId, renderAllPosts]);
+
+  // ---------------------------
+  // ✅ Stories handlers
+  // ---------------------------
+  function openUserStory(username: string) {
+    setViewerUser(username);
+    setViewerOpen(true);
+  }
+
+  function openUpload() {
+    setUploadOpen(true);
+  }
+
+  function refreshStories() {
+    setStoriesRefreshKey((v) => v + 1);
+  }
 
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <main className="min-h-screen bg-neutral-50 pb-16">
         <div className="mx-auto max-w-md p-5">
           <div className="rounded-3xl border-2 border-brand-blue bg-white p-5 shadow-soft">
-            {/* ✅ HomeTopBar now gets unreadCount + click handler */}
             <HomeTopBar unreadCount={unreadCount} onOpenNotifications={openNotifications} />
 
             {tab === "explore" ? (
@@ -383,6 +390,16 @@ export default function HomeClient({
               />
             ) : (
               <>
+                {/* ✅ Stories tray at top of feed */}
+                <Suspense fallback={null}>
+                  <StoriesTray
+                    currentUser={currentUser}
+                    refreshKey={storiesRefreshKey}
+                    onOpenUser={openUserStory}
+                    onOpenUpload={openUpload}
+                  />
+                </Suspense>
+
                 <div className="mt-2 flex items-center justify-between">
                   <p className="text-sm text-gray-600">Feed</p>
                   <select
@@ -470,7 +487,7 @@ export default function HomeClient({
           />
         )}
 
-        {/* ✅ Notifications Modal */}
+        {/* Notifications Modal */}
         <Suspense fallback={null}>
           <NotificationsModal
             open={notifOpen}
@@ -479,6 +496,29 @@ export default function HomeClient({
             onClose={closeNotifications}
             onOpenItem={onOpenNotificationItem}
             onMarkAllRead={markAllNotificationsRead}
+          />
+        </Suspense>
+
+        {/* ✅ Story Upload Modal */}
+        <Suspense fallback={null}>
+          <StoryUploadModal
+            open={uploadOpen}
+            currentUser={currentUser}
+            onClose={() => setUploadOpen(false)}
+            onUploaded={() => {
+              refreshStories();
+            }}
+          />
+        </Suspense>
+
+        {/* ✅ Story Viewer Modal */}
+        <Suspense fallback={null}>
+          <StoryViewerModal
+            open={viewerOpen}
+            viewer={currentUser}
+            username={viewerUser}
+            onClose={() => setViewerOpen(false)}
+            onSeen={() => refreshStories()}
           />
         </Suspense>
       </main>

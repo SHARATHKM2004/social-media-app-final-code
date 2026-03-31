@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-export type NotificationType = "like" | "comment" | "repost";
+export type NotificationType = "like" | "comment" | "repost" | "story_like";
 
 export type NotificationItem = {
   id: string;
@@ -78,13 +78,14 @@ export default function NotificationsModal({
           ) : (
             <div className="divide-y divide-gray-100">
               {list.map((n) => {
-                const msg =
-                  n.type === "like"
-                    ? `Your post liked by ${n.fromUser}`
-                    : n.type === "repost"
-                    ? `Your post reshared by ${n.fromUser}`
-                    : `Your post commented by ${n.fromUser}: "${n.commentText || ""}"`;
-
+               const msg =
+  n.type === "like"
+    ? `Your post liked by ${n.fromUser}`
+    : n.type === "repost"
+    ? `Your post reshared by ${n.fromUser}`
+    : n.type === "comment"
+    ? `Your post commented by ${n.fromUser}: "${n.commentText || ""}"`
+    : `Your story liked by ${n.fromUser}`;
                 return (
                   <button
                     key={n.id}

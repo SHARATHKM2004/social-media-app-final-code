@@ -1,12 +1,19 @@
 import clientPromise from "./mongodb";
-export type NotificationType = "like" | "comment" | "repost";
+
+export type NotificationType = "like" | "comment" | "repost" | "story_like";
 
 export type NotificationItem = {
   id: string;
   toUser: string;
   fromUser: string;
   type: NotificationType;
-  postId: string;
+
+  // For post notifications
+  postId?: string;
+
+  // For story notifications
+  storyId?: string;
+
   commentText?: string;
   createdAt: string;
   read: boolean;
@@ -19,7 +26,9 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export async function addNotification(input: Omit<NotificationItem, "id" | "createdAt" | "read">) {
+export async function addNotification(
+  input: Omit<NotificationItem, "id" | "createdAt" | "read">
+) {
   const client = await clientPromise;
   const db = client.db(DB_NAME);
 
@@ -32,6 +41,11 @@ export async function addNotification(input: Omit<NotificationItem, "id" | "crea
 
   // Do not notify yourself
   if ((doc.toUser || "").toLowerCase() === (doc.fromUser || "").toLowerCase()) {
+    return null;
+  }
+
+  // Must refer to either a post or a story
+  if (!doc.postId && !doc.storyId) {
     return null;
   }
 
@@ -52,9 +66,10 @@ export async function listNotifications(toUser: string, limit = 50) {
     .limit(limit)
     .toArray();
 
-  const unreadCount = await db
-    .collection(COLLECTION)
-    .countDocuments({ toUser: { $regex: new RegExp(`^${u}$`, "i") }, read: false });
+  const unreadCount = await db.collection(COLLECTION).countDocuments({
+    toUser: { $regex: new RegExp(`^${u}$`, "i") },
+    read: false,
+  });
 
   return {
     items: items as unknown as NotificationItem[],
