@@ -15,7 +15,8 @@ export async function GET(req: Request) {
 
     const messages = await getConversation(userA, userB);
     return NextResponse.json({ ok: true, messages }, { status: 200 });
-  } catch {
+  } catch (e) {
+    console.error(e);
     return NextResponse.json({ error: "Failed to load messages" }, { status: 500 });
   }
 }

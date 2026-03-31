@@ -10,9 +10,13 @@ type Thread = {
   lastMessage: string;
   updatedAt: string;
   avatarDataUrl?: string;
+  unreadCount: number;
 };
 
-type SearchUser = { username: string; avatarDataUrl: string };
+type SearchUser = {
+  username: string;
+  avatarDataUrl: string;
+};
 
 function timeShort(iso: string) {
   const d = new Date(iso);
@@ -21,43 +25,60 @@ function timeShort(iso: string) {
 
 export default function ChatsPage() {
   useBackToLanding();
-
   const router = useRouter();
 
-const [currentUser, setCurrentUser] = useState("");
-
-useEffect(() => {
-  const user = window.localStorage.getItem("currentUser") || "";
-  setCurrentUser(user);
-}, []);
-
-const [threads, setThreads] = useState<Thread[]>([]);
-const [results, setResults] = useState<SearchUser[]>([]);
- 
+  const [currentUser, setCurrentUser] = useState("");
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [results, setResults] = useState<SearchUser[]>([]);
   const [query, setQuery] = useState("");
-  
   const [loading, setLoading] = useState(false);
 
-useEffect(() => {
+  useEffect(() => {
+    const user = window.localStorage.getItem("currentUser") || "";
+    setCurrentUser(user);
+  }, []);
+
+  // ✅ Load chat threads
   async function loadThreads() {
     if (!currentUser) {
       setThreads([]);
       return;
     }
 
-    const res = await fetch(`/api/threads?user=${encodeURIComponent(currentUser)}`);
-    const data = await res.json();
+    const res = await fetch(`/api/threads?user=${encodeURIComponent(currentUser)}`, {
+      cache: "no-store",
+    });
 
+    const data = await res.json().catch(() => ({}));
     if (res.ok) setThreads(data.threads || []);
     else setThreads([]);
   }
 
-  loadThreads();
-}, [currentUser]);
+  /// ✅ initial load
+  useEffect(() => {
+    loadThreads();
+  }, [currentUser]);
 
- 
+  // ✅ Part‑E: refresh threads when returning / focus / read / send
+  useEffect(() => {
+    const onFocus = () => loadThreads();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadThreads();
+    };
+    const onCustom = () => loadThreads();
 
-  // search users like explore
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("chat-unread-refresh", onCustom);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("chat-unread-refresh", onCustom);
+    };
+  }, [currentUser]);
+
+  // ✅ Search users (unchanged)
   useEffect(() => {
     const t = setTimeout(async () => {
       const q = query.trim();
@@ -65,6 +86,7 @@ useEffect(() => {
         setResults([]);
         return;
       }
+
       setLoading(true);
       try {
         const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
@@ -80,113 +102,104 @@ useEffect(() => {
   }, [query]);
 
   return (
-    <main className="min-h-screen bg-neutral-50">
-      <div className="mx-auto min-h-screen max-w-md bg-white">
+    <main className="min-h-screen bg-brand-blue">
+      <div className="mx-auto max-w-md p-4 text-white">
         {/* Header */}
-        <div className="sticky top-0 z-10 border-b border-gray-200 bg-brand-blue px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold text-white">Chats</h1>
-            <span className="text-xs text-white/90">{new Date().toLocaleDateString()}</span>
-          </div>
-<button
-  onClick={() => router.push("/home")}
-  className="rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold text-white hover:bg-white/25"
->
-  Back to Home
-</button>
-          <div className="mt-3">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search users..."
-              className="w-full rounded-xl bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-white/40"
-            />
-          </div>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Chats</h2>
+          <button
+            onClick={() => router.push("/home")}
+            className="rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold hover:bg-white/25"
+          >
+            Back to Home
+          </button>
         </div>
 
+        {/* Search */}
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search users..."
+          className="mt-4 w-full rounded-xl bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-white/40"
+        />
+
         {/* Body */}
-        <div className="p-3">
-          {/* Search results (like explore) */}
+        <div className="mt-4 rounded-2xl bg-white text-gray-900">
+          {/* Search Results */}
           {query.trim() ? (
-            <div className="space-y-2">
-              {loading ? <p className="text-sm text-gray-600">Searching...</p> : null}
+            <div className="p-2">
+              {loading ? <p className="p-4 text-sm">Searching...</p> : null}
               {!loading && results.length === 0 ? (
-                <p className="text-sm text-gray-600">No users found.</p>
+                <p className="p-4 text-sm text-gray-500">No users found.</p>
               ) : null}
 
               {results.map((u) => (
-                <div
+                <Link
                   key={u.username}
-                  className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3"
+                  href={`/chats/${encodeURIComponent(u.username)}`}
+                  className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-gray-50"
                 >
-                  <div className="h-10 w-10 overflow-hidden rounded-full border border-gray-200 bg-neutral-100">
+                  <div className="h-10 w-10 overflow-hidden rounded-full bg-gray-200">
                     {u.avatarDataUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={u.avatarDataUrl} alt="avatar" className="h-full w-full object-cover" />
+                      <img src={u.avatarDataUrl} alt={u.username} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center">🙂</div>
+                      <span className="flex h-full w-full items-center justify-center">🙂</span>
                     )}
                   </div>
-
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-900">{u.username}</p>
-                    <p className="text-xs text-gray-500">View profile or message</p>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Link
-                      href={`/u/${encodeURIComponent(u.username)}`}
-                      className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                    >
-                      Profile
-                    </Link>
-
-                    <Link
-                      href={`/chats/${encodeURIComponent(u.username)}`}
-                      className="rounded-xl bg-brand-blue px-3 py-2 text-xs font-semibold text-white hover:opacity-95"
-                    >
-                      Message
-                    </Link>
-                  </div>
-                </div>
+                  <p className="font-semibold">{u.username}</p>
+                </Link>
               ))}
             </div>
           ) : (
             <>
-              {/* Threads list */}
+              {/* Threads List */}
               {threads.length === 0 ? (
-                <div className="mt-10 text-center">
-                  <p className="text-sm font-semibold text-gray-900">No chats yet</p>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Search a user above and start messaging.
-                  </p>
-                </div>
+                <p className="p-6 text-center text-sm text-gray-500">
+                  No chats yet. Search a user above and start messaging.
+                </p>
               ) : (
-                <div className="space-y-1">
-                  {threads.map((t) => (
-                    <Link
-                      key={t.withUser}
-                      href={`/chats/${encodeURIComponent(t.withUser)}`}
-                      className="flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-gray-50"
-                    >
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-gray-200 bg-neutral-100">
-                        {t.avatarDataUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={t.avatarDataUrl} alt="avatar" className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-lg">🙂</div>
-                        )}
-                      </div>
+                threads.map((t) => (
+                  <Link
+                    key={t.withUser}
+                    href={`/chats/${encodeURIComponent(t.withUser)}`}
+                    className="flex items-center gap-3 border-b border-gray-100 px-4 py-3 hover:bg-gray-50"
+                  >
+                    {/* Avatar */}
+                    <div className="h-10 w-10 overflow-hidden rounded-full bg-gray-200">
+                      {t.avatarDataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={t.avatarDataUrl} alt={t.withUser} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center">🙂</span>
+                      )}
+                    </div>
 
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-900">{t.withUser}</p>
-                        <p className="truncate text-xs text-gray-600">{t.lastMessage}</p>
-                      </div>
+                    {/* Name + last message */}
+                    <div className="min-w-0 flex-1">
+                      <p className={`${t.unreadCount > 0 ? "font-bold" : "font-semibold"} truncate`}>
+                        {t.withUser}
+                      </p>
+                      <p
+                        className={`truncate text-xs ${
+                          t.unreadCount > 0 ? "font-semibold text-gray-900" : "text-gray-500"
+                        }`}
+                      >
+                        {t.lastMessage || "No messages"}
+                      </p>
+                    </div>
 
-                      <p className="text-xs text-gray-500">{timeShort(t.updatedAt)}</p>
-                    </Link>
-                  ))}
-                </div>
+                    {/* Time + unread badge */}
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-[11px] text-gray-500">{timeShort(t.updatedAt)}</span>
+                      {t.unreadCount > 0 ? (
+                        <span className="min-w-[22px] rounded-full bg-brand-blue px-2 py-0.5 text-center text-[11px] font-bold text-white">
+                          {t.unreadCount > 99 ? "99+" : t.unreadCount}
+                        </span>
+                      ) : null}
+                    </div>
+                  </Link>
+                ))
               )}
             </>
           )}

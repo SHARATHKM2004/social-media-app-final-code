@@ -45,7 +45,6 @@ export default function HomeClient({
 }: HomeClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const tab = searchParams?.get("tab") || "";
   const modal = searchParams?.get("modal") || "";
   const focusPostId = searchParams?.get("postId") || "";
@@ -164,7 +163,6 @@ export default function HomeClient({
   useEffect(() => {
     if (tab !== "explore") return;
     if (exploreMode !== "posts") return;
-
     const t = setTimeout(async () => {
       const q = query.trim();
       if (!q) {
@@ -181,7 +179,6 @@ export default function HomeClient({
         setPostSearchLoading(false);
       }
     }, 300);
-
     return () => clearTimeout(t);
   }, [tab, exploreMode, query]);
 
@@ -266,12 +263,15 @@ export default function HomeClient({
   }
 
   // ---------------------------
-  // ✅ Notifications wiring (unchanged)
+  // ✅ Notifications wiring
   // ---------------------------
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifItems, setNotifItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // ✅ chat unread messages count
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
   async function loadNotifications() {
     if (!currentUser) return;
@@ -299,6 +299,38 @@ export default function HomeClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
+  // ✅ ONE function to refresh unread chat count (used by polling + event)
+  const refreshChatUnread = useRef(async () => {});
+  refreshChatUnread.current = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/messages/unread?user=${encodeURIComponent(currentUser)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setChatUnreadCount(Number(data.unreadCount || 0));
+    } catch {
+      // silent
+    }
+  };
+
+  // ✅ poll unread chat messages count
+  useEffect(() => {
+    if (!currentUser) return;
+    refreshChatUnread.current();
+    const id = window.setInterval(() => refreshChatUnread.current(), 5000);
+    return () => window.clearInterval(id);
+  }, [currentUser]);
+
+  // ✅ Part-E: instant refresh when chat page tells us "read changed" or "sent"
+  useEffect(() => {
+    const handler = () => {
+      refreshChatUnread.current();
+    };
+    window.addEventListener("chat-unread-refresh", handler);
+    return () => window.removeEventListener("chat-unread-refresh", handler);
+  }, []);
+
   async function markAllNotificationsRead() {
     if (!currentUser) return;
     await fetch("/api/notifications/read", {
@@ -323,19 +355,18 @@ export default function HomeClient({
 
   function onOpenNotificationItem(n: NotificationItem) {
     if (n.type === "story_like") {
-  setNotifOpen(false);
-  setViewerUser(currentUser); // open YOUR story
-  setViewerOpen(true);
-  return;
-}
+      setNotifOpen(false);
+      setViewerUser(currentUser);
+      setViewerOpen(true);
+      return;
+    }
+
     setNotifOpen(false);
-    
     const params = new URLSearchParams(window.location.search);
     params.delete("tab");
     params.delete("modal");
     params.set("postId", n.postId);
     router.push(`/home?${params.toString()}`);
-    
   }
 
   // scroll + highlight
@@ -355,8 +386,8 @@ export default function HomeClient({
   // ---------------------------
   // ✅ Stories handlers
   // ---------------------------
-  function openUserStory(username: string) {
-    setViewerUser(username);
+  function openUserStory(u: string) {
+    setViewerUser(u);
     setViewerOpen(true);
   }
 
@@ -373,7 +404,11 @@ export default function HomeClient({
       <main className="min-h-screen bg-neutral-50 pb-16">
         <div className="mx-auto max-w-md p-5">
           <div className="rounded-3xl border-2 border-brand-blue bg-white p-5 shadow-soft">
-            <HomeTopBar unreadCount={unreadCount} onOpenNotifications={openNotifications} />
+            <HomeTopBar
+              unreadCount={unreadCount}
+              onOpenNotifications={openNotifications}
+              chatUnreadCount={chatUnreadCount}
+            />
 
             {tab === "explore" ? (
               <ExplorePanel
@@ -390,7 +425,7 @@ export default function HomeClient({
               />
             ) : (
               <>
-                {/* ✅ Stories tray at top of feed */}
+                {/* ✅ Stories tray */}
                 <Suspense fallback={null}>
                   <StoriesTray
                     currentUser={currentUser}
@@ -469,9 +504,7 @@ export default function HomeClient({
         />
 
         {/* Likes/Reposts List Modal */}
-        {showList && (
-          <UserListModal title={showList.title} users={showList.users} onClose={() => setShowList(null)} />
-        )}
+        {showList && <UserListModal title={showList.title} users={showList.users} onClose={() => setShowList(null)} />}
 
         {/* Comments Modal */}
         {showComments && (
@@ -480,9 +513,7 @@ export default function HomeClient({
             onClose={() => setShowComments(null)}
             onSend={async (text) => {
               const updatedComments = await handleAddComment(showComments, text);
-              if (updatedComments) {
-                setShowComments({ ...showComments, comments: updatedComments });
-              }
+              if (updatedComments) setShowComments({ ...showComments, comments: updatedComments });
             }}
           />
         )}
@@ -499,19 +530,17 @@ export default function HomeClient({
           />
         </Suspense>
 
-        {/* ✅ Story Upload Modal */}
+        {/* Story Upload Modal */}
         <Suspense fallback={null}>
           <StoryUploadModal
             open={uploadOpen}
             currentUser={currentUser}
             onClose={() => setUploadOpen(false)}
-            onUploaded={() => {
-              refreshStories();
-            }}
+            onUploaded={() => refreshStories()}
           />
         </Suspense>
 
-        {/* ✅ Story Viewer Modal */}
+        {/* Story Viewer Modal */}
         <Suspense fallback={null}>
           <StoryViewerModal
             open={viewerOpen}
