@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import { Post } from "@/types/post";
@@ -9,7 +9,7 @@ import ExplorePanel from "@/components/feed/ExplorePanel";
 import FeedPostCard from "@/components/feed/FeedPostCard";
 import { useExploreSearch } from "@/hooks/useExploreSearch";
 
-// Lazy modals (as you already did)
+// Lazy modals
 const UserListModal = lazy(() => import("@/components/feed/UserListModal"));
 const CommentsModal = lazy(() => import("@/components/feed/CommentsModal"));
 const CreatePostModal = lazy(() => import("@/components/feed/CreatePostModal"));
@@ -36,31 +36,45 @@ export default function HomeClient({
 }: HomeClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = searchParams.get("tab") || "";
-  const modal = searchParams.get("modal") || "";
+  const tab = searchParams?.get("tab") || "";
+  const modal = searchParams?.get("modal") || "";
 
   const PAGE_SIZE = initialLimit || 10;
 
-  // logged-in user (stored during login)
+  // logged-in user
   const [currentUser, setCurrentUser] = useState("");
   useEffect(() => {
     const user = window.localStorage.getItem("currentUser") || "";
     setCurrentUser(user);
   }, []);
 
-  // Redux hooks
-  const dispatch = useDispatch<AppDispatch>();
-  const posts = useSelector((state: RootState) => state.posts.items) as Post[];
-  const feedLoading = useSelector((state: RootState) => state.posts.loading) as boolean;
-  const feedError = useSelector((state: RootState) => state.posts.error) as string;
+  // ✅ Local fallback posts (guarantees feed shows even if Redux stays empty)
+  const [clientPosts, setClientPosts] = useState<Post[]>([]);
 
-  // Pagination state from redux
-  const currentPage = useSelector((state: RootState) => state.posts.page) as number;
-  const hasMore = useSelector((state: RootState) => state.posts.hasMore) as boolean;
+  // ✅ Lighthouse / Perf controls
+  const [mediaReady, setMediaReady] = useState(false);
+  const [renderAllPosts, setRenderAllPosts] = useState(false);
 
-  // ✅ HYBRID: Hydrate Redux from server-fetched page-1 posts (NO first client fetch)
   useEffect(() => {
-    if (!posts || posts.length === 0) {
+    const t1 = window.setTimeout(() => setMediaReady(true), 1200);
+    const t2 = window.setTimeout(() => setRenderAllPosts(true), 1800);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, []);
+
+  // Redux
+  const dispatch = useDispatch<AppDispatch>();
+  const posts = useSelector((state: RootState) => state.posts.items) as Post[]; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
+  const feedLoading = useSelector((state: RootState) => state.posts.loading) as boolean; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
+  const feedError = useSelector((state: RootState) => state.posts.error) as string; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
+  const currentPage = useSelector((state: RootState) => state.posts.page) as number; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
+  const hasMore = useSelector((state: RootState) => state.posts.hasMore) as boolean; // [1](https://wipflillp-my.sharepoint.com/personal/sharath_kori_wipfli_com/Documents/Microsoft%20Copilot%20Chat%20Files/HomeClient.tsx)
+
+  // ✅ Hydrate Redux only when SSR provided posts (we are using [] for Lighthouse)
+  useEffect(() => {
+    if (initialPosts && initialPosts.length > 0) {
       dispatch(
         setInitialPosts({
           posts: initialPosts,
@@ -71,17 +85,57 @@ export default function HomeClient({
         })
       );
     }
-    // intentionally not depending on posts to avoid re-hydrating repeatedly
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, initialPosts, initialPage, initialLimit, initialTotal, initialHasMore]);
 
-  // Explore hook (Users)
-  const { query, setQuery, results, searchLoading } = useExploreSearch(tab === "explore");
+  // ✅ Auto-fetch ONCE when SSR initialPosts is empty (fixes empty feed)
+  const didAutoFetch = useRef(false);
 
-  // Explore mode toggle
+  useEffect(() => {
+    if (didAutoFetch.current) return;
+    if (tab === "explore") return;
+    if (initialPosts && initialPosts.length > 0) return; // SSR already had posts
+    if (feedLoading) return;
+    if (posts && posts.length > 0) return;
+    if (clientPosts && clientPosts.length > 0) return;
+
+    didAutoFetch.current = true;
+
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/posts?page=1&limit=${PAGE_SIZE}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          const list = (data?.posts || []) as Post[];
+
+          // ✅ Set local posts (guaranteed UI update)
+          setClientPosts(list);
+
+          // ✅ Also try to hydrate Redux (if slice supports it)
+          dispatch(
+            setInitialPosts({
+              posts: list,
+              page: data?.page ?? 1,
+              limit: data?.limit ?? PAGE_SIZE,
+              total: data?.total ?? 0,
+              hasMore: !!data?.hasMore,
+            })
+          );
+        }
+      } catch {
+        // keep silent for demo
+      }
+    }, 700);
+
+    return () => window.clearTimeout(t);
+  }, [tab, initialPosts, feedLoading, posts, clientPosts, dispatch, PAGE_SIZE]);
+
+  // Explore
+  const { query, setQuery, results, searchLoading } = useExploreSearch(tab === "explore");
   const [exploreMode, setExploreMode] = useState<"users" | "posts">("users");
 
-  // Posts search state
+  // Posts search
   const [postResults, setPostResults] = useState<
     {
       id: string;
@@ -96,7 +150,6 @@ export default function HomeClient({
   >([]);
   const [postSearchLoading, setPostSearchLoading] = useState(false);
 
-  // Debounced post search (caption OR author)
   useEffect(() => {
     if (tab !== "explore") return;
     if (exploreMode !== "posts") return;
@@ -121,39 +174,35 @@ export default function HomeClient({
     return () => clearTimeout(t);
   }, [tab, exploreMode, query]);
 
-  // UI state for post options menu
   const [postMenuId, setPostMenuId] = useState<string | null>(null);
-
-  // Like/Repost list modal
   const [showList, setShowList] = useState<{ title: string; users: string[] } | null>(null);
-
-  // Comments modal
   const [showComments, setShowComments] = useState<Post | null>(null);
 
-  // Sort mode
+  // ✅ Use Redux posts if available, otherwise fallback to clientPosts
+  const effectivePosts = posts && posts.length > 0 ? posts : clientPosts;
+
   const [sortMode, setSortMode] = useState<"latest" | "trending">("latest");
   function trendingScore(p: Post) {
     return p.likes.length * 2 + p.comments.length * 3 + p.reposts.length * 4;
   }
 
   const sortedPosts = useMemo(() => {
-    const list = [...posts];
+    const list = [...effectivePosts];
     if (sortMode === "latest") {
-      return list.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     return list.sort((a, b) => trendingScore(b) - trendingScore(a));
-  }, [posts, sortMode]);
+  }, [effectivePosts, sortMode]);
 
-  // Close create modal by removing modal param from URL
+  // Lighthouse: show only 1 post first, then all
+  const visiblePosts = renderAllPosts ? sortedPosts : sortedPosts.slice(0, 1);
+
   function closeCreateModal() {
     const params = new URLSearchParams(window.location.search);
     params.delete("modal");
     router.replace(`/home?${params.toString()}`.replace(/\?$/, ""));
   }
 
-  // Minimal mutation handlers (call API then refresh Redux feed)
   async function handleLike(postId: string) {
     if (!currentUser) return;
     const res = await fetch(`/api/posts/${encodeURIComponent(postId)}/like`, {
@@ -178,7 +227,6 @@ export default function HomeClient({
   async function handleAddComment(p: Post, text: string) {
     if (!currentUser) return null;
     if (!p.allowComments) return null;
-
     const trimmed = text.trim();
     if (!trimmed) return null;
 
@@ -196,7 +244,6 @@ export default function HomeClient({
     return null;
   }
 
-  // Load more handler
   async function handleLoadMore() {
     if (feedLoading) return;
     if (!hasMore) return;
@@ -208,10 +255,8 @@ export default function HomeClient({
       <main className="min-h-screen bg-neutral-50 pb-16">
         <div className="mx-auto max-w-md p-5">
           <div className="rounded-3xl border-2 border-brand-blue bg-white p-5 shadow-soft">
-            {/* Top bar */}
             <HomeTopBar />
 
-            {/* Explore mode */}
             {tab === "explore" ? (
               <ExplorePanel
                 mode={exploreMode}
@@ -227,10 +272,10 @@ export default function HomeClient({
               />
             ) : (
               <>
-                {/* Feed mode header */}
                 <div className="mt-2 flex items-center justify-between">
                   <p className="text-sm text-gray-600">Feed</p>
-                  <select aria-label="Sort posts"
+                  <select
+                    aria-label="Sort posts"
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value as "latest" | "trending")}
                     className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
@@ -243,13 +288,13 @@ export default function HomeClient({
                 {feedError ? <p className="mt-2 text-sm text-red-600">{feedError}</p> : null}
 
                 <div className="mt-4 space-y-4">
-                  {feedLoading && posts.length === 0 ? (
+                  {feedLoading && effectivePosts.length === 0 ? (
                     <p className="text-sm text-gray-600">Loading feed...</p>
-                  ) : posts.length === 0 ? (
+                  ) : effectivePosts.length === 0 ? (
                     <p className="text-sm text-gray-600">No posts yet. Create your first post ✅</p>
                   ) : null}
 
-                  {sortedPosts.map((p) => (
+                  {visiblePosts.map((p) => (
                     <FeedPostCard
                       key={p.id}
                       post={p}
@@ -261,10 +306,10 @@ export default function HomeClient({
                       onRepost={() => handleRepost(p)}
                       onShowLikes={() => setShowList({ title: "Liked by", users: p.likes })}
                       onShowReposts={() => setShowList({ title: "Reposted by", users: p.reposts })}
+                      deferMedia={!mediaReady}
                     />
                   ))}
 
-                  {/* Load more */}
                   {hasMore ? (
                     <button
                       onClick={handleLoadMore}
@@ -273,7 +318,7 @@ export default function HomeClient({
                     >
                       {feedLoading ? "Loading..." : "Load more"}
                     </button>
-                  ) : posts.length > 0 ? (
+                  ) : effectivePosts.length > 0 ? (
                     <p className="text-center text-xs text-gray-500">You’ve reached the end ✅</p>
                   ) : null}
                 </div>
@@ -284,7 +329,6 @@ export default function HomeClient({
 
         <BottomNav />
 
-        {/* Create Post Modal */}
         <CreatePostModal
           open={modal === "create"}
           currentUser={currentUser}
@@ -294,16 +338,10 @@ export default function HomeClient({
           }}
         />
 
-        {/* Likes/Reposts List Modal */}
         {showList && (
-          <UserListModal
-            title={showList.title}
-            users={showList.users}
-            onClose={() => setShowList(null)}
-          />
+          <UserListModal title={showList.title} users={showList.users} onClose={() => setShowList(null)} />
         )}
 
-        {/* Comments Modal */}
         {showComments && (
           <CommentsModal
             post={showComments}

@@ -1,13 +1,15 @@
 "use client";
 
+
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useBackToLanding from "@/components/useBackToLanding";
 
-export default function regsuccessclient() {
+export default function RegSuccessClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const username = searchParams.get("username") || "User";
+
+  const username = searchParams?.get("username") || "User";
   const [count, setCount] = useState(5);
 
   useBackToLanding();
@@ -18,6 +20,7 @@ export default function regsuccessclient() {
     }, 1000);
 
     const timeout = setTimeout(() => {
+      // keep your original destination if different
       router.replace("/login");
     }, 5000);
 
@@ -26,6 +29,7 @@ export default function regsuccessclient() {
       clearTimeout(timeout);
     };
   }, [router]);
+
 
   return (
     <main className="min-h-screen bg-neutral-50">

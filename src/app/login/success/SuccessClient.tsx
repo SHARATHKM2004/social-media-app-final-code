@@ -7,7 +7,7 @@ import useBackToLanding from "@/components/useBackToLanding";
 export default function SuccessClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const username = searchParams.get("username") || "User";
+const username = searchParams?.get("username") || "User";
   const [count, setCount] = useState(5);
 
   useBackToLanding(); // back always to landing (except home)

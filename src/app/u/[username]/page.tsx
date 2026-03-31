@@ -5,8 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 
 export default function PublicProfilePage() {
   const router = useRouter();
-  const params = useParams<{ username: string }>();
-  const usernameParam = decodeURIComponent(params.username || "");
+  const params = useParams<{ username?: string }>();
+const usernameParam = params?.username ? decodeURIComponent(params.username) : "";
+
   
 const [userPosts, setUserPosts] = useState<Post[]>([]);
 const [postsCount, setPostsCount] = useState(0);

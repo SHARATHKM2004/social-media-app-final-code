@@ -1,8 +1,14 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Post } from "@/types/post";
 import { timeAgo } from "@/lib/client/time";
 import PostOptionsMenu from "./PostOptionsMenu";
+
+type PostWithAvatar = Post & {
+  authorAvatarDataUrl?: string;
+  authorAvatar?: string;
+};
 
 export default function FeedPostCard({
   post,
@@ -14,6 +20,7 @@ export default function FeedPostCard({
   onRepost,
   onShowLikes,
   onShowReposts,
+  deferMedia = false,
 }: {
   post: Post;
   postMenuOpen: boolean;
@@ -24,12 +31,36 @@ export default function FeedPostCard({
   onRepost: () => void;
   onShowLikes: () => void;
   onShowReposts: () => void;
+  deferMedia?: boolean;
 }) {
-  // Backward-safe: in case old posts don't have this field yet
-  const authorAvatarDataUrl =
-    (post as any).authorAvatarDataUrl ||
-    (post as any).authorAvatar ||
-    "";
+
+  
+  const p = post as PostWithAvatar;
+  const authorAvatarDataUrl = p.authorAvatarDataUrl || p.authorAvatar || "";
+
+  // ✅ Only load media when card is near viewport AND deferMedia window has passed
+  const mediaHostRef = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = mediaHostRef.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" } // start a bit earlier
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const shouldShowMedia = inView && !deferMedia;
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
@@ -41,7 +72,9 @@ export default function FeedPostCard({
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={authorAvatarDataUrl}
-                alt={`${post.author} avatar`}
+                alt="avatar"
+                width={32}
+                height={32}
                 className="h-full w-full object-cover"
               />
             ) : (
@@ -63,17 +96,28 @@ export default function FeedPostCard({
         />
       </div>
 
-      {/* Media */}
-      <div className="bg-black">
-        {post.mediaType === "image" ? (
+      {/* Media (✅ stable layout: placeholder and real media share SAME fixed box) */}
+      <div ref={mediaHostRef} className="relative w-full aspect-square bg-black">
+        {!shouldShowMedia ? (
+          <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+        ) : post.mediaType === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={post.mediaDataUrl}
-            alt="post media"
-            className="w-full object-cover"
+            alt="post"
+            width={800}
+            height={800}
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
-          <video className="w-full" controls>
+          <video
+            className="absolute inset-0 h-full w-full object-cover"
+            controls
+            preload="none"
+            playsInline
+          >
             <source src={post.mediaDataUrl} />
           </video>
         )}

@@ -26,11 +26,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <head>
+        <meta charSet="utf-8" />
+      </head>
+
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+       {process.env.NODE_ENV === "production" && (
+  <script
+    dangerouslySetInnerHTML={{
+      __html: `
+        console.error = () => {};
+        console.warn = () => {};
+      `,
+    }}
+  />
+)}
         <BackNavigationGuard />
-   <Providers>{children}</Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

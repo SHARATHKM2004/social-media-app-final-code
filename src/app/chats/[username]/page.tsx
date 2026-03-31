@@ -40,8 +40,11 @@ function formatTime(iso: string) {
 export default function ChatWithUserPage() {
   useBackToLanding(); // keeping as-is (you said back issue is not there)
 
-  const params = useParams<{ username: string }>();
-  const otherUser = decodeURIComponent(params.username || "");
+  const params = useParams<{ username?: string }>();
+const otherUser = params?.username
+  ? decodeURIComponent(params.username)
+  : "";
+
 
   const [currentUser, setCurrentUser] = useState("");
 

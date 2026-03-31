@@ -6,8 +6,9 @@ import { Post } from "@/types/post";
 
 export default function PostPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+  const params = useParams<{ id?: string }>();
+const id = params?.id || "";
+
 
   const [loading, setLoading] = useState(true);
   const [post, setPost] = useState<Post>();
