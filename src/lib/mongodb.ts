@@ -1,26 +1,23 @@
-import { MongoClient } from "mongodb";
+import { MongoClient, MongoClientOptions } from "mongodb";
 
-const uri = process.env.MONGODB_URI!;
-
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
+const uri = process.env.MONGODB_URI;
 
 if (!uri) {
   throw new Error("Please add MONGODB_URI to .env.local");
 }
 
-if (process.env.NODE_ENV === "development") {
-  const globalAny = global as unknown as { _mongoClientPromise?: Promise<MongoClient> };
+const options: MongoClientOptions = {
+  maxPoolSize: 10,
+  serverSelectionTimeoutMS: 5000,
+};
 
-  if (!globalAny._mongoClientPromise) {
-    client = new MongoClient(uri);
-    globalAny._mongoClientPromise = client.connect();
-  }
-
-  clientPromise = globalAny._mongoClientPromise;
-} else {
-  client = new MongoClient(uri);
-  clientPromise = client.connect();
+declare global {
+  // eslint-disable-next-line no-var
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
+
+export const clientPromise: Promise<MongoClient> =
+  global._mongoClientPromise ??
+  (global._mongoClientPromise = new MongoClient(uri, options).connect());
 
 export default clientPromise;
