@@ -16,7 +16,7 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-export const clientPromise: Promise<MongoClient> =
+const clientPromise =
   global._mongoClientPromise ??
   (global._mongoClientPromise = new MongoClient(uri, options).connect());
 
