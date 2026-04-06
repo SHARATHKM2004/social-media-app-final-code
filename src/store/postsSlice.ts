@@ -5,7 +5,10 @@ type FetchPostsArgs = {
   page?: number;
   limit?: number;
   username?: string;
-  reset?: boolean; // if true, replace items
+  reset?: boolean;
+
+  // ✅ NEW: default false (payload-friendly)
+  includeMedia?: boolean;
 };
 
 type FetchPostsResponse = {
@@ -32,27 +35,31 @@ const initialState: PostsState = {
   loading: false,
   error: "",
   page: 1,
-  limit: 10,
+  limit: 5,
   total: 0,
   hasMore: false,
 };
 
-// try/catch included (mentor asked)
 export const fetchPosts = createAsyncThunk<
   FetchPostsResponse,
   FetchPostsArgs | void,
   { rejectValue: string }
 >("posts/fetchPosts", async (args, thunkAPI) => {
   try {
-    const page = args && args.page ? args.page : 1;
-    const limit = args && args.limit ? args.limit : 10;
-    const username = args && args.username ? args.username : "";
-    const reset = !!(args && args.reset);
+    const page = args?.page ?? 1;
+    const limit = args?.limit ?? 5;
+    const username = args?.username ?? "";
+    const reset = !!args?.reset;
+
+    const includeMedia = !!args?.includeMedia;
 
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("limit", String(limit));
     if (username) params.set("username", username);
+
+    // ✅ important
+    params.set("includeMedia", includeMedia ? "1" : "0");
 
     const res = await fetch(`/api/posts?${params.toString()}`);
     const data = await res.json();
@@ -86,7 +93,6 @@ const postsSlice = createSlice({
   name: "posts",
   initialState,
   reducers: {
-    // ✅ NEW: hydrate Redux from SSR without fetching again
     setInitialPosts: (state, action: PayloadAction<InitialPostsPayload>) => {
       const { posts, page, limit, total, hasMore } = action.payload;
 
@@ -121,7 +127,6 @@ const postsSlice = createSlice({
           return;
         }
 
-        // Append without duplicating existing IDs
         const existingIds = new Set(state.items.map((p) => p.id));
         const next = posts.filter((p) => !existingIds.has(p.id));
         state.items = [...state.items, ...next];

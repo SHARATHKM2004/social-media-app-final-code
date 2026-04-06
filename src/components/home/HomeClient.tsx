@@ -448,22 +448,23 @@ export default function HomeClient({
                     <p className="text-sm text-gray-600">No posts yet. Create your first post ✅</p>
                   ) : null}
 
-                  {visiblePosts.map((p) => (
-                    <div key={p.id} id={`post-${p.id}`} className="rounded-2xl">
-                      <FeedPostCard
-                        post={p}
-                        postMenuOpen={postMenuId === p.id}
-                        onToggleMenu={() => setPostMenuId((v) => (v === p.id ? null : p.id))}
-                        onCloseMenu={() => setPostMenuId(null)}
-                        onLike={() => handleLike(p.id)}
-                        onOpenComments={() => setShowComments(p)}
-                        onRepost={() => handleRepost(p)}
-                        onShowLikes={() => setShowList({ title: "Liked by", users: p.likes })}
-                        onShowReposts={() => setShowList({ title: "Reposted by", users: p.reposts })}
-                        deferMedia={!mediaReady}
-                      />
-                    </div>
-                  ))}
+            {visiblePosts.map((p, idx) => (
+  <div key={p.id} id={`post-${p.id}`} className="rounded-2xl">
+    <FeedPostCard
+      post={p}
+      postMenuOpen={postMenuId === p.id}
+      onToggleMenu={() => setPostMenuId((v) => (v === p.id ? null : p.id))}
+      onCloseMenu={() => setPostMenuId(null)}
+      onLike={() => handleLike(p.id)}
+      onOpenComments={() => setShowComments(p)}
+      onRepost={() => handleRepost(p)}
+      onShowLikes={() => setShowList({ title: "Liked by", users: p.likes })}
+      onShowReposts={() => setShowList({ title: "Reposted by", users: p.reposts })}
+      deferMedia={!mediaReady}
+      priority={idx === 0}   // ✅ ADD THIS LINE
+    />
+  </div>
+))}
 
                   {/* ✅ Load more button (page2 limit5 etc.) */}
                   {hasMore ? (

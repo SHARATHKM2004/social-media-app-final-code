@@ -9,9 +9,13 @@ type PostWithExtras = Post & {
   authorAvatarDataUrl?: string;
   authorAvatar?: string;
   _id?: string;
-  // in your types you have: mediaDataUrl, mediaType
+
+  // optional media payload
   mediaDataUrl?: string;
   mediaType?: "image" | "video";
+
+  // when API sends includeMedia=0
+  hasMedia?: boolean;
 };
 
 export default function FeedPostCard({
@@ -25,6 +29,9 @@ export default function FeedPostCard({
   onShowLikes,
   onShowReposts,
   deferMedia = false,
+
+  // ✅ FIX: define priority so it will never be "not defined"
+  priority = false,
 }: {
   post: Post;
   postMenuOpen: boolean;
@@ -36,29 +43,39 @@ export default function FeedPostCard({
   onShowLikes: () => void;
   onShowReposts: () => void;
   deferMedia?: boolean;
+
+  // ✅ NEW PROP
+  priority?: boolean;
 }) {
   const p = post as PostWithExtras;
 
   // Avatar can be base64 or normal url
   const authorAvatarDataUrl = p.authorAvatarDataUrl || p.authorAvatar || "";
 
-  // Your Post type screenshot shows id:string, so use post.id primarily
+  // Use post.id primarily (your app uses string ids)
   const postId = (post as any).id ?? p._id ?? "";
 
-  // Your Post type uses mediaDataUrl (base64)
   const rawMedia = (p.mediaDataUrl ?? "") as string;
 
-  // ✅ If base64, load via API route (binary + cached)
-  const mediaSrc =
-    rawMedia.startsWith("data:") && postId
-      ? `/api/media/post/${postId}`
-      : rawMedia;
+  // if API stripped mediaDataUrl, it should still say hasMedia:true
+  const hasMedia = p.hasMedia !== undefined ? p.hasMedia : !!rawMedia;
 
-  // ✅ Only load media when card is near viewport AND deferMedia window has passed
+  // ✅ Always produce a usable mediaSrc when media exists:
+  // - if base64 is present, we still load via /api/media/post/:id to avoid base64 LCP
+  // - if base64 missing (includeMedia=0), also load via /api/media/post/:id
+  const mediaSrc = hasMedia && postId ? `/api/media/post/${encodeURIComponent(postId)}` : "";
+
+  // ✅ Only load media when near viewport (for non-priority cards)
   const mediaHostRef = useRef<HTMLDivElement | null>(null);
   const [inView, setInView] = useState(false);
 
   useEffect(() => {
+    // For LCP card, show immediately (don’t wait for observer)
+    if (priority) {
+      setInView(true);
+      return;
+    }
+
     const el = mediaHostRef.current;
     if (!el) return;
 
@@ -74,9 +91,9 @@ export default function FeedPostCard({
 
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [priority]);
 
-  const shouldShowMedia = inView && !deferMedia;
+  const shouldShowMedia = (priority || inView) && !deferMedia;
 
   return (
     <div className="w-full rounded-xl border border-white/10 bg-white/5 p-3">
@@ -104,22 +121,21 @@ export default function FeedPostCard({
           </div>
         </div>
 
-        {/* ✅ FIX: PostOptionsMenu expects isOpen (not open) + pass postId */}
         <PostOptionsMenu
-          postId={postId}
+          postId={String(postId)}
           isOpen={postMenuOpen}
           onToggle={onToggleMenu}
           onClose={onCloseMenu}
         />
       </div>
 
-      {/* Media (stable layout placeholder) */}
+      {/* Media */}
       <div
         ref={mediaHostRef}
         className="relative mt-3 w-full overflow-hidden rounded-lg bg-black/20"
         style={{ aspectRatio: "1 / 1" }}
       >
-        {!shouldShowMedia ? (
+        {!shouldShowMedia || !mediaSrc ? (
           <div className="absolute inset-0 animate-pulse bg-white/5" />
         ) : p.mediaType === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -127,17 +143,21 @@ export default function FeedPostCard({
             src={mediaSrc}
             alt="post"
             className="absolute inset-0 h-full w-full object-cover"
-            loading="lazy"
             decoding="async"
+            // ✅ LCP fix: do NOT lazy load the LCP card
+            loading={priority ? "eager" : "lazy"}
+            // ✅ Safe attribute even if TS types vary
+            data-fetchpriority={priority ? "high" : "auto"}
           />
         ) : (
           <video
-            src={mediaSrc}
             className="absolute inset-0 h-full w-full object-cover"
             controls
             playsInline
-            preload="metadata"
-          />
+            preload={priority ? "auto" : "metadata"}
+          >
+            <source src={mediaSrc} />
+          </video>
         )}
       </div>
 
