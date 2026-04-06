@@ -1,27 +1,83 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Post } from "@/types/post";
+
+const PAGE_SIZE = 5;
 
 export function useFeed(currentUser: string) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
 
+  // pagination state
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const buildUrl = useCallback((p: number) => {
+    return `/api/posts?page=${p}&limit=${PAGE_SIZE}`;
+  }, []);
+
+  // ✅ Load page 1 limit 5
   const loadFeed = useCallback(async () => {
     setFeedLoading(true);
     try {
-      const res = await fetch("/api/posts");
+      const res = await fetch(buildUrl(1), { cache: "no-store" });
       const data = await res.json();
-      if (res.ok) setPosts(data.posts || []);
+
+      if (res.ok) {
+        setPosts(data.posts || []);
+        setPage(data.page || 1);
+        setHasMore(Boolean(data.hasMore));
+      } else {
+        setPosts([]);
+        setPage(1);
+        setHasMore(false);
+      }
     } finally {
       setFeedLoading(false);
     }
-  }, []);
+  }, [buildUrl]);
 
+  // ✅ Load next page limit 5 and APPEND
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    if (!hasMore) return;
+
+    const nextPage = page + 1;
+    setLoadingMore(true);
+
+    try {
+      const res = await fetch(buildUrl(nextPage), { cache: "no-store" });
+      const data = await res.json();
+
+      if (res.ok) {
+        const newPosts: Post[] = data.posts || [];
+
+        // Append and avoid duplicates by id
+        setPosts((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const merged = [...prev];
+          for (const np of newPosts) {
+            if (!seen.has(np.id)) merged.push(np);
+          }
+          return merged;
+        });
+
+        setPage(data.page || nextPage);
+        setHasMore(Boolean(data.hasMore));
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [buildUrl, hasMore, loadingMore, page]);
+
+  // initial load
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
 
+  // existing actions (same as your current file)
   const toggleLike = useCallback(
     async (postId: string) => {
       if (!currentUser) return;
@@ -67,6 +123,7 @@ export function useFeed(currentUser: string) {
     async (post: Post, text: string) => {
       if (!currentUser) return null;
       if (!post.allowComments) return null;
+
       const trimmed = text.trim();
       if (!trimmed) return null;
 
@@ -88,5 +145,25 @@ export function useFeed(currentUser: string) {
     [currentUser]
   );
 
-  return { posts, feedLoading, loadFeed, toggleLike, toggleRepost, addComment };
+  const showLoadMore = useMemo(() => {
+    return !feedLoading && posts.length > 0 && hasMore;
+  }, [feedLoading, posts.length, hasMore]);
+
+  return {
+    posts,
+    feedLoading,
+    loadFeed,
+
+    // pagination
+    page,
+    hasMore,
+    loadingMore,
+    loadMore,
+    showLoadMore,
+
+    // actions
+    toggleLike,
+    toggleRepost,
+    addComment,
+  };
 }

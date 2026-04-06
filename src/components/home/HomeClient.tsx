@@ -45,16 +45,18 @@ export default function HomeClient({
 }: HomeClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = searchParams?.get("tab") || "";
-  const modal = searchParams?.get("modal") || "";
-  const focusPostId = searchParams?.get("postId") || "";
 
-  const PAGE_SIZE = initialLimit || 10;
+  const tab = searchParams?.get("tab") ?? "";
+  const modal = searchParams?.get("modal") ?? "";
+  const focusPostId = searchParams?.get("postId") ?? "";
+
+  // ✅ REQUIREMENT: page size must be 5 always
+  const PAGE_SIZE = 5;
 
   // logged-in user
   const [currentUser, setCurrentUser] = useState("");
   useEffect(() => {
-    const user = window.localStorage.getItem("currentUser") || "";
+    const user = window.localStorage.getItem("currentUser") ?? "";
     setCurrentUser(user);
   }, []);
 
@@ -64,20 +66,14 @@ export default function HomeClient({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerUser, setViewerUser] = useState("");
 
-  // ✅ Local fallback posts
+  // ✅ Local fallback posts (in case SSR empty)
   const [clientPosts, setClientPosts] = useState<Post[]>([]);
 
-  // ✅ Lighthouse / Perf controls
+  // ✅ Lighthouse / Perf controls (keep your existing behavior)
   const [mediaReady, setMediaReady] = useState(false);
-  const [renderAllPosts, setRenderAllPosts] = useState(false);
-
   useEffect(() => {
-    const t1 = window.setTimeout(() => setMediaReady(true), 1200);
-    const t2 = window.setTimeout(() => setRenderAllPosts(true), 1800);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
+    const t = window.setTimeout(() => setMediaReady(true), 1200);
+    return () => window.clearTimeout(t);
   }, []);
 
   // Redux
@@ -88,23 +84,23 @@ export default function HomeClient({
   const currentPage = useSelector((state: RootState) => state.posts.page) as number;
   const hasMore = useSelector((state: RootState) => state.posts.hasMore) as boolean;
 
-  // ✅ Hydrate Redux only when SSR provided posts
+  // ✅ Hydrate Redux when SSR provided posts (force limit=5)
   useEffect(() => {
     if (initialPosts && initialPosts.length > 0) {
       dispatch(
         setInitialPosts({
           posts: initialPosts,
-          page: initialPage,
-          limit: initialLimit,
-          total: initialTotal,
+          page: initialPage || 1,
+          limit: PAGE_SIZE, // ✅ force 5
+          total: initialTotal || 0,
           hasMore: initialHasMore,
         })
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, initialPosts, initialPage, initialLimit, initialTotal, initialHasMore]);
+  }, [dispatch, initialPosts, initialPage, initialTotal, initialHasMore]);
 
-  // ✅ Auto-fetch ONCE when SSR initialPosts is empty (fix empty feed)
+  // ✅ Auto-fetch ONCE when SSR initialPosts is empty (page=1 limit=5)
   const didAutoFetch = useRef(false);
   useEffect(() => {
     if (didAutoFetch.current) return;
@@ -121,13 +117,14 @@ export default function HomeClient({
         const res = await fetch(`/api/posts?page=1&limit=${PAGE_SIZE}`, { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          const list = (data?.posts || []) as Post[];
+          const list = (data?.posts ?? []) as Post[];
           setClientPosts(list);
+
           dispatch(
             setInitialPosts({
               posts: list,
               page: data?.page ?? 1,
-              limit: data?.limit ?? PAGE_SIZE,
+              limit: PAGE_SIZE,
               total: data?.total ?? 0,
               hasMore: !!data?.hasMore,
             })
@@ -136,10 +133,10 @@ export default function HomeClient({
       } catch {
         // silent
       }
-    }, 700);
+    }, 300);
 
     return () => window.clearTimeout(t);
-  }, [tab, initialPosts, feedLoading, posts, clientPosts, dispatch, PAGE_SIZE]);
+  }, [tab, initialPosts, feedLoading, posts, clientPosts, dispatch]);
 
   // Explore
   const { query, setQuery, results, searchLoading } = useExploreSearch(tab === "explore");
@@ -163,6 +160,7 @@ export default function HomeClient({
   useEffect(() => {
     if (tab !== "explore") return;
     if (exploreMode !== "posts") return;
+
     const t = setTimeout(async () => {
       const q = query.trim();
       if (!q) {
@@ -173,12 +171,13 @@ export default function HomeClient({
       try {
         const res = await fetch(`/api/posts/search?q=${encodeURIComponent(q)}`);
         const data = await res.json();
-        if (res.ok) setPostResults(data.posts || []);
+        if (res.ok) setPostResults(data.posts ?? []);
         else setPostResults([]);
       } finally {
         setPostSearchLoading(false);
       }
     }, 300);
+
     return () => clearTimeout(t);
   }, [tab, exploreMode, query]);
 
@@ -202,12 +201,10 @@ export default function HomeClient({
     return list.sort((a, b) => trendingScore(b) - trendingScore(a));
   }, [effectivePosts, sortMode]);
 
-  // If user deep-links to a post, ensure we render all posts
-  useEffect(() => {
-    if (focusPostId) setRenderAllPosts(true);
-  }, [focusPostId]);
-
-  const visiblePosts = renderAllPosts ? sortedPosts : sortedPosts.slice(0, 1);
+  // ✅ REQUIREMENT FIX:
+  // We should render ALL posts currently loaded (page 1 => 5 posts)
+  // Not just 1 post.
+  const visiblePosts = sortedPosts;
 
   function closeCreateModal() {
     const params = new URLSearchParams(window.location.search);
@@ -256,14 +253,16 @@ export default function HomeClient({
     return null;
   }
 
+  // ✅ Load more: page 2 limit 5 (append)
   async function handleLoadMore() {
     if (feedLoading) return;
     if (!hasMore) return;
     dispatch(fetchPosts({ page: (currentPage || 1) + 1, limit: PAGE_SIZE }));
+  console.log("LoadMore clicked: requesting page", (currentPage || 1) + 1);
   }
 
   // ---------------------------
-  // ✅ Notifications wiring
+  // ✅ Notifications wiring (kept as-is)
   // ---------------------------
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -282,8 +281,8 @@ export default function HomeClient({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setNotifItems((data.items || []) as NotificationItem[]);
-        setUnreadCount(Number(data.unreadCount || 0));
+        setNotifItems((data.items ?? []) as NotificationItem[]);
+        setUnreadCount(Number(data.unreadCount ?? 0));
       }
     } finally {
       setNotifLoading(false);
@@ -308,13 +307,12 @@ export default function HomeClient({
         cache: "no-store",
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) setChatUnreadCount(Number(data.unreadCount || 0));
+      if (res.ok) setChatUnreadCount(Number(data.unreadCount ?? 0));
     } catch {
       // silent
     }
   };
 
-  // ✅ poll unread chat messages count
   useEffect(() => {
     if (!currentUser) return;
     refreshChatUnread.current();
@@ -322,7 +320,6 @@ export default function HomeClient({
     return () => window.clearInterval(id);
   }, [currentUser]);
 
-  // ✅ Part-E: instant refresh when chat page tells us "read changed" or "sent"
   useEffect(() => {
     const handler = () => {
       refreshChatUnread.current();
@@ -338,7 +335,6 @@ export default function HomeClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user: currentUser }),
     }).catch(() => null);
-
     setUnreadCount(0);
     setNotifItems((prev) => prev.map((x) => ({ ...x, read: true })));
   }
@@ -360,7 +356,6 @@ export default function HomeClient({
       setViewerOpen(true);
       return;
     }
-
     setNotifOpen(false);
     const params = new URLSearchParams(window.location.search);
     params.delete("tab");
@@ -381,20 +376,16 @@ export default function HomeClient({
       }
     }, 600);
     return () => window.clearTimeout(t);
-  }, [focusPostId, renderAllPosts]);
+  }, [focusPostId]);
 
-  // ---------------------------
   // ✅ Stories handlers
-  // ---------------------------
   function openUserStory(u: string) {
     setViewerUser(u);
     setViewerOpen(true);
   }
-
   function openUpload() {
     setUploadOpen(true);
   }
-
   function refreshStories() {
     setStoriesRefreshKey((v) => v + 1);
   }
@@ -474,6 +465,7 @@ export default function HomeClient({
                     </div>
                   ))}
 
+                  {/* ✅ Load more button (page2 limit5 etc.) */}
                   {hasMore ? (
                     <button
                       onClick={handleLoadMore}
