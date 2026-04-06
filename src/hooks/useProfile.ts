@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Post } from "@/types/post";
 
+const PROFILE_PAGE_SIZE = 6;
+
 export function useProfileData() {
   const [username, setUsername] = useState("");
   const [pronoun, setPronoun] = useState("");
@@ -25,7 +27,7 @@ export function useProfileData() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: u }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
     if (res.ok) {
       setPronoun(data?.profile?.pronoun || "");
@@ -33,14 +35,17 @@ export function useProfileData() {
       setAvatarDataUrl(data?.profile?.avatarDataUrl || "");
     }
 
-    // posts
-    const postsRes = await fetch(`/api/posts?username=${encodeURIComponent(u)}`);
-    const postsData = await postsRes.json();
+    // ✅ posts (LIGHTWEIGHT): only first 6 posts, without base64
+    const postsRes = await fetch(
+      `/api/posts?username=${encodeURIComponent(u)}&page=1&limit=${PROFILE_PAGE_SIZE}&includeMedia=0`,
+      { cache: "no-store" }
+    );
+    const postsData = await postsRes.json().catch(() => ({}));
 
     if (postsRes.ok) {
-      const posts = postsData.posts || [];
+      const posts = (postsData.posts || []) as Post[];
       setUserPosts(posts);
-      setPostsCount(posts.length);
+      setPostsCount(Number(postsData.total ?? posts.length)); // total from API if provided
     }
   }
 
@@ -102,26 +107,25 @@ export function useProfileData() {
       body: JSON.stringify({ username, pronoun, bio, avatarDataUrl }),
     });
 
-    const data = await res.json();
-
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data?.error || "Failed to save." };
     return { ok: true, error: "" };
   }
 
-async function shareProfile(): Promise<{ ok: boolean; copied?: boolean }> {
-  const text = `My profile: ${profileLink}`;
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: "Profile", text, url: profileLink });
-      return { ok: true };
-    } else {
-      await navigator.clipboard.writeText(profileLink);
-      return { ok: true, copied: true };
+  async function shareProfile(): Promise<{ ok: boolean; copied?: boolean }> {
+    const text = `My profile: ${profileLink}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Profile", text, url: profileLink });
+        return { ok: true };
+      } else {
+        await navigator.clipboard.writeText(profileLink);
+        return { ok: true, copied: true };
+      }
+    } catch {
+      return { ok: false };
     }
-  } catch {
-    return { ok: false };
   }
-}
 
   async function changePassword(currentPassword: string, newPassword: string) {
     const res = await fetch("/api/change-password", {
@@ -130,7 +134,7 @@ async function shareProfile(): Promise<{ ok: boolean; copied?: boolean }> {
       body: JSON.stringify({ username, currentPassword, newPassword }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data?.error || "Failed to change password." };
     return { ok: true, error: "" };
   }
@@ -147,7 +151,6 @@ async function shareProfile(): Promise<{ ok: boolean; copied?: boolean }> {
   }
 
   return {
-    // data
     username,
     pronoun,
     bio,
@@ -156,12 +159,8 @@ async function shareProfile(): Promise<{ ok: boolean; copied?: boolean }> {
     postsCount,
     userPosts,
     profileLink,
-
-    // setters
     setPronoun,
     setBio,
-
-    // actions
     refreshProfile,
     uploadAvatar,
     saveProfile,

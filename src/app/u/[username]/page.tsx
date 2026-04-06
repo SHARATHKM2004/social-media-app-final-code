@@ -73,6 +73,7 @@ export default async function PublicProfilePage({
                   <img
                     src={profile.avatarDataUrl}
                     alt="avatar"
+                    loading="lazy"
                     className="h-14 w-14 rounded-full object-cover"
                   />
                 ) : (
@@ -111,6 +112,7 @@ export default async function PublicProfilePage({
                           alt="post"
                           className="h-40 w-full object-cover"
                           loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element

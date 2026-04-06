@@ -13,16 +13,19 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const username = searchParams.get("username")?.trim() || "";
+    const username = (searchParams.get("username") || "").trim();
 
     const pageParam = parseInt(searchParams.get("page") || "1", 10);
     const limitParam = parseInt(searchParams.get("limit") || "10", 10);
 
+    // ✅ NEW: includeMedia flag (default ON)
+    // profile will call includeMedia=0 to avoid base64 payload
+    const includeMediaParam = (searchParams.get("includeMedia") || "1").trim();
+    const includeMedia = includeMediaParam !== "0";
+
     const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
     const limit =
-      Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 100
-        ? limitParam
-        : 10;
+      Number.isFinite(limitParam) && limitParam > 0 && limitParam <= 100 ? limitParam : 10;
 
     const posts = await readPosts();
 
@@ -39,17 +42,33 @@ export async function GET(req: Request) {
     const paginated = filtered.slice(start, end);
     const hasMore = end < total;
 
-    // ✅ Enrich each post with author avatar (limit is small, so N lookups is ok)
+    // ✅ Enrich each post with author avatar
+    // ✅ If includeMedia=0, strip base64 to reduce payload
     const enriched = await Promise.all(
       paginated.map(async (p) => {
         const u = await findUserByUsername(p.author);
+        const authorAvatarDataUrl = (u as any)?.avatarDataUrl || "";
+
+        if (includeMedia) {
+          return {
+            ...p,
+            authorAvatarDataUrl,
+          };
+        }
+
+        // ✅ payload-optimized version (no mediaDataUrl)
+        // Keep metadata so UI can fetch media via /api/media/post/:id
+        // Note: mediaType remains, id remains.
+        const { mediaDataUrl, ...rest } = p as any;
+
         return {
-          ...p,
-          authorAvatarDataUrl: (u as any)?.avatarDataUrl || "",
+          ...rest,
+          authorAvatarDataUrl,
+          hasMedia: !!mediaDataUrl,
         };
       })
     );
-    
+
     return NextResponse.json(
       {
         ok: true,
@@ -62,7 +81,8 @@ export async function GET(req: Request) {
       {
         status: 200,
         headers: {
-          "Cache-Control": "private, max-age=10",
+          // If media not included, allow a bit longer cache (still private)
+          "Cache-Control": includeMedia ? "private, max-age=10" : "private, max-age=30",
         },
       }
     );

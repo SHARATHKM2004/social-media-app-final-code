@@ -28,6 +28,7 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
+        <link rel="preconnect" href="/" />
       </head>
 
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>

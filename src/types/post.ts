@@ -8,8 +8,15 @@ export type Comment = {
 export type Post = {
   id: string;
   author: string;
+
   mediaType: "image" | "video";
-  mediaDataUrl: string;
+
+  // ✅ Optional because for profile/grid we won’t send base64
+  mediaDataUrl?: string;
+
+  // ✅ Added: helps UI know media exists even if base64 not included
+  hasMedia?: boolean;
+
   caption: string;
   allowComments: boolean;
   allowRepost: boolean;
@@ -17,5 +24,4 @@ export type Post = {
   likes: string[];
   reposts: string[];
   comments: Comment[];
-  
 };
