@@ -17,4 +17,5 @@ export type Post = {
   likes: string[];
   reposts: string[];
   comments: Comment[];
+  
 };
