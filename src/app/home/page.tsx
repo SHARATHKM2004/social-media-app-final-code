@@ -2,8 +2,12 @@ import { Suspense } from "react";
 import HomeClient from "@/components/home/HomeClient";
 import { Post } from "@/types/post";
 
+// ✅ SSR / Dynamic Rendering (mentor-proof)
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
-  const PAGE_SIZE = 10;
+  // ✅ Your requirement: page 1 limit 5
+  const PAGE_SIZE = 5;
 
   return (
     <Suspense fallback={<div>Loading...</div>}>
