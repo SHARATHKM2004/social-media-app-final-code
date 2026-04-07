@@ -2,7 +2,7 @@
   "name": "Mini Social",
   "short_name": "MiniSocial",
   "description": "Internal social app for office colleagues",
-  "start_url": "/home",
+  "start_url": "/?pwa=1",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
