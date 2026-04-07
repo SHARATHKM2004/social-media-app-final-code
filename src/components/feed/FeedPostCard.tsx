@@ -10,13 +10,22 @@ type PostWithExtras = Post & {
   authorAvatar?: string;
   _id?: string;
 
-  // optional media payload
   mediaDataUrl?: string;
   mediaType?: "image" | "video";
-
-  // when API sends includeMedia=0
   hasMedia?: boolean;
 };
+
+function safeIso(input: unknown): string | null {
+  if (!input) return null;
+  if (input instanceof Date) {
+    const t = input.getTime();
+    return Number.isFinite(t) ? input.toISOString() : null;
+  }
+  const d = new Date(String(input));
+  const t = d.getTime();
+  if (!Number.isFinite(t)) return null;
+  return d.toISOString();
+}
 
 export default function FeedPostCard({
   post,
@@ -29,8 +38,6 @@ export default function FeedPostCard({
   onShowLikes,
   onShowReposts,
   deferMedia = false,
-
-  // ✅ FIX: define priority so it will never be "not defined"
   priority = false,
 }: {
   post: Post;
@@ -43,38 +50,26 @@ export default function FeedPostCard({
   onShowLikes: () => void;
   onShowReposts: () => void;
   deferMedia?: boolean;
-
-  // ✅ NEW PROP
   priority?: boolean;
 }) {
   const p = post as PostWithExtras;
 
-  // Avatar can be base64 or normal url
   const authorAvatarDataUrl = p.authorAvatarDataUrl || p.authorAvatar || "";
-
-  // Use post.id primarily (your app uses string ids)
   const postId = (post as any).id ?? p._id ?? "";
 
   const rawMedia = (p.mediaDataUrl ?? "") as string;
-
-  // if API stripped mediaDataUrl, it should still say hasMedia:true
   const hasMedia = p.hasMedia !== undefined ? p.hasMedia : !!rawMedia;
 
-  // ✅ Always produce a usable mediaSrc when media exists:
-  // - if base64 is present, we still load via /api/media/post/:id to avoid base64 LCP
-  // - if base64 missing (includeMedia=0), also load via /api/media/post/:id
-  const mediaSrc = hasMedia && postId ? `/api/media/post/${encodeURIComponent(postId)}` : "";
+  const mediaSrc =
+    hasMedia && postId ? `/api/media/post/${encodeURIComponent(postId)}` : "";
 
-  // ✅ Only load media when near viewport (for non-priority cards)
+  const createdIso = safeIso((post as any).createdAt);
+
   const mediaHostRef = useRef<HTMLDivElement | null>(null);
   const [inView, setInView] = useState(false);
 
   useEffect(() => {
-    // For LCP card, show immediately (don’t wait for observer)
-    if (priority) {
-      setInView(true);
-      return;
-    }
+    if (priority) return;
 
     const el = mediaHostRef.current;
     if (!el) return;
@@ -96,7 +91,7 @@ export default function FeedPostCard({
   const shouldShowMedia = (priority || inView) && !deferMedia;
 
   return (
-    <div className="w-full rounded-xl border border-white/10 bg-white/5 p-3">
+    <div className="w-full rounded-xl border border-gray-200 bg-white p-3">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -110,14 +105,18 @@ export default function FeedPostCard({
               decoding="async"
             />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100">
               🙂
             </div>
           )}
 
           <div className="leading-tight">
-            <div className="font-semibold">{post.author}</div>
-            <div className="text-xs text-white/60">{timeAgo(post.createdAt)}</div>
+            <div className="font-semibold text-gray-900">{post.author}</div>
+
+            {/* ✅ FIX: visible color on white background */}
+            <div className="text-xs text-gray-500">
+              {createdIso ? timeAgo(createdIso) : "just now"}
+            </div>
           </div>
         </div>
 
@@ -132,11 +131,11 @@ export default function FeedPostCard({
       {/* Media */}
       <div
         ref={mediaHostRef}
-        className="relative mt-3 w-full overflow-hidden rounded-lg bg-black/20"
+        className="relative mt-3 w-full overflow-hidden rounded-lg bg-black/10"
         style={{ aspectRatio: "1 / 1" }}
       >
         {!shouldShowMedia || !mediaSrc ? (
-          <div className="absolute inset-0 animate-pulse bg-white/5" />
+          <div className="absolute inset-0 animate-pulse bg-black/5" />
         ) : p.mediaType === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -144,9 +143,7 @@ export default function FeedPostCard({
             alt="post"
             className="absolute inset-0 h-full w-full object-cover"
             decoding="async"
-            // ✅ LCP fix: do NOT lazy load the LCP card
             loading={priority ? "eager" : "lazy"}
-            // ✅ Safe attribute even if TS types vary
             data-fetchpriority={priority ? "high" : "auto"}
           />
         ) : (
@@ -163,11 +160,13 @@ export default function FeedPostCard({
 
       {/* Content */}
       {post.caption ? (
-        <div className="mt-3 whitespace-pre-wrap text-sm">{post.caption}</div>
+        <div className="mt-3 whitespace-pre-wrap text-sm text-gray-900">
+          {post.caption}
+        </div>
       ) : null}
 
       {/* Actions */}
-      <div className="mt-3 flex items-center gap-4 text-sm">
+      <div className="mt-3 flex items-center gap-4 text-sm text-gray-800">
         <button onClick={onLike} className="hover:opacity-80">
           ❤️ Like
         </button>
@@ -179,7 +178,7 @@ export default function FeedPostCard({
         </button>
       </div>
 
-      <div className="mt-2 flex items-center gap-3 text-xs text-white/70">
+      <div className="mt-2 flex items-center gap-3 text-xs text-gray-600">
         <button onClick={onShowLikes} className="hover:opacity-80">
           {post.likes.length} likes
         </button>
