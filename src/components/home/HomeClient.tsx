@@ -26,7 +26,7 @@ const StoryViewerModal = lazy(() => import("@/components/stories/StoryViewerModa
 // Redux
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "@/store/store";
-import { fetchPosts, setInitialPosts } from "@/store/postsSlice";
+import { fetchPosts, setInitialPosts, updatePostLike, updatePostRepost} from "@/store/postsSlice";
 
 type HomeClientProps = {
   initialPosts: Post[];
@@ -212,26 +212,39 @@ export default function HomeClient({
     router.replace(`/home?${params.toString()}`.replace(/\?$/, ""));
   }
 
-  async function handleLike(postId: string) {
-    if (!currentUser) return;
-    const res = await fetch(`/api/posts/${encodeURIComponent(postId)}/like`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: currentUser }),
-    });
-    if (res.ok) dispatch(fetchPosts({ page: 1, limit: PAGE_SIZE, reset: true }));
-  }
+async function handleLike(postId: string) {
+  if (!currentUser) return;
 
-  async function handleRepost(p: Post) {
-    if (!currentUser) return;
-    if (!p.allowRepost) return;
-    const res = await fetch(`/api/posts/${encodeURIComponent(p.id)}/repost`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: currentUser }),
-    });
-    if (res.ok) dispatch(fetchPosts({ page: 1, limit: PAGE_SIZE, reset: true }));
-  }
+  // ✅ Optimistic UI update
+  dispatch(updatePostLike({ postId, user: currentUser }));
+
+  const res = await fetch(`/api/posts/${encodeURIComponent(postId)}/like`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: currentUser }),
+  });
+
+  // ✅ Optional: re-sync from server (fresh because fetchPosts uses no-store now)
+  if (res.ok) dispatch(fetchPosts({ page: 1, limit: PAGE_SIZE, reset: true }));
+}
+
+
+async function handleRepost(p: Post) {
+  if (!currentUser) return;
+  if (!p.allowRepost) return;
+
+  // ✅ Optimistic UI update
+  dispatch(updatePostRepost({ postId: p.id, user: currentUser }));
+
+  const res = await fetch(`/api/posts/${encodeURIComponent(p.id)}/repost`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: currentUser }),
+  });
+
+  // ✅ Optional: re-sync from server
+  if (res.ok) dispatch(fetchPosts({ page: 1, limit: PAGE_SIZE, reset: true }));
+}
 
   async function handleAddComment(p: Post, text: string) {
     if (!currentUser) return null;
@@ -347,11 +360,13 @@ export default function HomeClient({
     setNotifItems((prev) => prev.map((x) => ({ ...x, read: true })));
   }
 
-  async function openNotifications() {
-    setNotifOpen(true);
-    await loadNotifications();
-    if (unreadCount > 0) await markAllNotificationsRead();
-  }
+async function openNotifications() {
+  setNotifOpen(true);
+  await loadNotifications();
+  if (unreadCount > 0) await markAllNotificationsRead(); // ❌ auto-mark
+}
+
+
 
   function closeNotifications() {
     setNotifOpen(false);

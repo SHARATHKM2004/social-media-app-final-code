@@ -7,7 +7,7 @@ type FetchPostsArgs = {
   username?: string;
   reset?: boolean;
 
-  // ✅ NEW: default false (payload-friendly)
+  // ✅ default false (payload-friendly)
   includeMedia?: boolean;
 };
 
@@ -58,10 +58,10 @@ export const fetchPosts = createAsyncThunk<
     params.set("limit", String(limit));
     if (username) params.set("username", username);
 
-    // ✅ important
     params.set("includeMedia", includeMedia ? "1" : "0");
 
-    const res = await fetch(`/api/posts?${params.toString()}`);
+    // ✅ IMPORTANT: no-store so UI doesn’t get stale likes/reposts
+    const res = await fetch(`/api/posts?${params.toString()}`, { cache: "no-store" });
     const data = await res.json();
 
     if (!res.ok) {
@@ -93,6 +93,7 @@ const postsSlice = createSlice({
   name: "posts",
   initialState,
   reducers: {
+    // ✅ Hydrate Redux from SSR without fetching again
     setInitialPosts: (state, action: PayloadAction<InitialPostsPayload>) => {
       const { posts, page, limit, total, hasMore } = action.payload;
 
@@ -104,6 +105,38 @@ const postsSlice = createSlice({
 
       state.loading = false;
       state.error = "";
+    },
+
+    // ✅ NEW: Optimistic Like toggle (UI updates instantly)
+    updatePostLike: (
+      state,
+      action: PayloadAction<{ postId: string; user: string }>
+    ) => {
+      const { postId, user } = action.payload;
+      const post = state.items.find((p) => p.id === postId);
+      if (!post) return;
+
+      if (post.likes.includes(user)) {
+        post.likes = post.likes.filter((u) => u !== user);
+      } else {
+        post.likes.push(user);
+      }
+    },
+
+    // ✅ NEW: Optimistic Repost toggle (UI updates instantly)
+    updatePostRepost: (
+      state,
+      action: PayloadAction<{ postId: string; user: string }>
+    ) => {
+      const { postId, user } = action.payload;
+      const post = state.items.find((p) => p.id === postId);
+      if (!post) return;
+
+      if (post.reposts.includes(user)) {
+        post.reposts = post.reposts.filter((u) => u !== user);
+      } else {
+        post.reposts.push(user);
+      }
     },
   },
   extraReducers: (builder) => {
@@ -127,6 +160,7 @@ const postsSlice = createSlice({
           return;
         }
 
+        // Append without duplicating IDs
         const existingIds = new Set(state.items.map((p) => p.id));
         const next = posts.filter((p) => !existingIds.has(p.id));
         state.items = [...state.items, ...next];
@@ -138,5 +172,6 @@ const postsSlice = createSlice({
   },
 });
 
-export const { setInitialPosts } = postsSlice.actions;
+// ✅ Export new actions also
+export const { setInitialPosts, updatePostLike, updatePostRepost } = postsSlice.actions;
 export default postsSlice.reducer;
