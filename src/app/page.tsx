@@ -7,7 +7,7 @@ export default function LandingPage() {
         {/* App Title */}
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-            Let’s Connect
+            Mini Social 
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             Connect • Share • Explore
