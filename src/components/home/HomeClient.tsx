@@ -288,6 +288,14 @@ export default function HomeClient({
       setNotifLoading(false);
     }
   }
+  useEffect(() => {
+  const handler = () => {
+    openNotifications(); // uses existing modal + counts logic
+  };
+  window.addEventListener("open-notifications", handler);
+  return () => window.removeEventListener("open-notifications", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [openNotifications]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -484,7 +492,7 @@ export default function HomeClient({
           </div>
         </div>
 
-        <BottomNav />
+        <BottomNav notifUnreadCount={unreadCount} />
 
         {/* Create Post Modal */}
         <CreatePostModal
