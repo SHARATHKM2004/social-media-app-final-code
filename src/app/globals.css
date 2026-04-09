@@ -1,35 +1,110 @@
-
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-
-html,body{
-  height:100%;
+html,
+body {
+  height: 100%;
 }
 
+/* Keep your variable approach but align to UI tokens */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --background: #fafafa;
+  --foreground: #111827;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --surface: #ffffff;
+  --border: #e5e7eb;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --muted: #6b7280;
+  --faint: #9ca3af;
+
+  --brand: #0050ff;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial,
+    Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --- Real-app interaction polish --- */
+a,
+button,
+[role="button"] {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active,
+a:active {
+  transform: scale(0.98);
+}
+
+* {
+  scroll-behavior: smooth;
+}
+
+/* --- Reusable “Design System” utilities --- */
+@layer components {
+  .app-shell {
+    @apply min-h-screen bg-[var(--background)] text-[var(--foreground)];
+  }
+
+  .card {
+    @apply rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-card;
+  }
+
+  .card-pad {
+    @apply p-5;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(0, 80, 255, 0.14);
+    outline: none;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold;
+    transition: transform 120ms ease, opacity 120ms ease, box-shadow 200ms ease;
+  }
+
+  .btn-primary {
+    @apply btn bg-[var(--brand)] text-white hover:opacity-95;
+  }
+
+  .btn-ghost {
+    @apply btn border border-[var(--border)] bg-white text-gray-900 hover:bg-gray-50;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:opacity-95;
+  }
+
+  .meta {
+    @apply text-xs text-gray-500;
+  }
+
+  .muted {
+    @apply text-sm text-gray-600;
+  }
+}
+
+/* Optional: respect dark mode class if you later re-enable it */
+html.dark {
+  --background: #0b0b0f;
+  --foreground: #f3f4f6;
+  --surface: #111827;
+  --border: rgba(255, 255, 255, 0.08);
+  --muted: rgba(255, 255, 255, 0.72);
+  --faint: rgba(255, 255, 255, 0.52);
 }
